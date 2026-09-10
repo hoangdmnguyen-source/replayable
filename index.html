@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Re-Playable · Google Ads converter</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{color-scheme:dark;
+  --bg:#0a0c12; --panel:#11141d; --panel2:#161a26; --line:#232838;
+  --tx:#e8ecf6; --dim:#8b93a8; --accent:#7c5cff; --accent2:#22d3ee;
+  --ok:#34d399; --warn:#fbbf24; --bad:#f87171;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,#141826,#0d1018);position:sticky;top:0;z-index:50;flex-wrap:wrap}
+.logo{font-weight:800;font-size:17px;letter-spacing:-.02em}
+.logo span{background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;
+  background-clip:text;-webkit-text-fill-color:transparent}
+.tag{font-size:11px;color:var(--dim);border:1px solid var(--line);padding:3px 8px;border-radius:99px}
+.spacer{flex:1}
+header label,.actionbar label{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.actionbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;
+  padding-bottom:14px;border-bottom:1px solid var(--line)}
+.actionbar select{min-width:210px}
+@media(max-width:620px){.actionbar .spacer{flex-basis:100%;height:0}}
+select,input[type=text],input[type=password]{background:var(--panel2);border:1px solid var(--line);color:var(--tx);
+  border-radius:8px;padding:8px 10px;font-size:12.5px;outline:none}
+select:focus,input:focus{border-color:var(--accent)}
+
+main{padding:18px;max-width:1400px;margin:0 auto}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px}
+.card h2{margin:0 0 12px;font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--dim);font-weight:700;
+  display:flex;align-items:center;gap:10px}
+.card h2 .spacer{flex:1}
+.hint{font-size:12px;color:var(--dim);line-height:1.5}
+.hint code,.f code{font:12px ui-monospace,Menlo,Consolas,monospace;background:#0d1018;padding:1px 5px;border-radius:5px;color:#c7cee0}
+
+#drop{border:2px dashed var(--line);border-radius:12px;padding:30px 16px;text-align:center;cursor:pointer;
+  transition:.15s;background:var(--panel2)}
+#drop:hover,#drop.hot{border-color:var(--accent);background:#191d2c}
+#drop b{display:block;font-size:15px;margin-bottom:4px}
+#drop small{color:var(--dim)}
+
+button{font:inherit}
+button.act{padding:10px 16px;border:0;border-radius:10px;font-weight:800;font-size:13px;cursor:pointer;color:#fff;
+  background:linear-gradient(90deg,var(--accent),#9d7bff);white-space:nowrap}
+button.act:disabled{opacity:.4;cursor:not-allowed}
+button.ghost{background:var(--panel2);border:1px solid var(--line);color:var(--tx);padding:7px 12px;border-radius:9px;
+  cursor:pointer;font-size:12.5px;font-weight:600}
+button.ghost:hover{border-color:#38405a}
+button.ghost:disabled{opacity:.4;cursor:not-allowed}
+button.mini{padding:5px 9px;font-size:11.5px}
+
+.summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.stat{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-width:120px}
+.stat small{display:block;font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.stat b{font-size:18px}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);text-align:left;padding:6px 8px;
+  border-bottom:1px solid var(--line);font-weight:700}
+td{padding:9px 8px;border-bottom:1px solid #1b2030;vertical-align:middle}
+tr.file{cursor:pointer}
+tr.file:hover td{background:#141826}
+tr.file.sel td{background:#181c2c}
+.name{font-weight:700;word-break:break-all}
+.net{font-size:11.5px;color:var(--dim)}
+.pct{font-weight:800;font-size:16px;font-variant-numeric:tabular-nums}
+.pct.ok{color:var(--ok)} .pct.warn{color:var(--warn)} .pct.bad{color:var(--bad)} .pct.dim{color:var(--dim);font-weight:600}
+.arrow{color:var(--dim);padding:0 4px}
+.chips{display:flex;gap:5px;flex-wrap:wrap}
+.chip{font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid var(--line);background:var(--panel2);color:var(--dim);white-space:nowrap}
+.chip.blocker{border-color:#5b2a2a;color:var(--bad)} .chip.warn{border-color:#5a4a1a;color:var(--warn)}
+.chip.advice{border-color:#2a3f5b;color:var(--accent2)} .chip.ok{border-color:#1f5a3f;color:var(--ok)} .chip.ai{border-color:#4a2a6b;color:#c4a6ff}
+.acts{display:flex;gap:6px;justify-content:flex-end}
+
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,420px);gap:16px;align-items:start}
+/* minmax(0,1fr), never a bare 1fr: a bare one keeps an auto minimum, so the
+   minified code excerpts in a finding push the column past the screen. */
+@media(max-width:980px){.grid{grid-template-columns:minmax(0,1fr)}}
+
+.headline{display:flex;align-items:center;gap:14px;margin-bottom:12px;flex-wrap:wrap}
+.big{font-size:40px;font-weight:900;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.verdict{font-weight:700}
+.verdict.ok{color:var(--ok)} .verdict.warn{color:var(--warn)} .verdict.bad{color:var(--bad)}
+.group{margin:14px 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);font-weight:700}
+.f{padding:9px 10px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;background:var(--panel2)}
+.f .t{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.f .t b{font-size:13px}
+.f .area{font-size:11px;color:var(--dim)}
+.f .d{font-size:12.5px;color:#b8c0d4;margin-top:4px}
+.f .m{font-size:12px;color:var(--dim);margin-top:3px;overflow-wrap:anywhere}
+.f .m i{color:#c7cee0;font-style:normal}
+.f.done{opacity:.75;border-style:dashed}
+.f.done .t b{text-decoration:line-through;text-decoration-color:#556}
+.f .fixlabel{font-size:11px;color:var(--ok);font-weight:700}
+.f .q{font-size:12px;color:#a9b4cc;margin-top:6px;padding-left:9px;
+  border-left:2px solid #3a4560;font-style:italic}
+.f .unsourced{color:#8a7a4a}
+
+.deviceWrap{display:flex;justify-content:center;align-items:flex-start;overflow:hidden;position:relative}
+.device{background:#000;border:6px solid #1c2130;border-radius:26px;overflow:hidden;box-shadow:0 20px 60px #0008;transform-origin:top center}
+.device iframe{width:100%;height:100%;border:0;display:block;overflow:hidden;background:#000}
+.toast{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:var(--ok);color:#052;padding:8px 14px;
+  border-radius:99px;font-weight:800;font-size:12.5px;box-shadow:0 8px 24px #0008;opacity:0;transition:.2s;pointer-events:none}
+.toast.show{opacity:1}
+
+details summary{cursor:pointer;color:var(--dim);font-size:12px;user-select:none}
+.aiRow{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+@media(max-width:700px){.aiRow{grid-template-columns:1fr}}
+.aiRow label{display:block;font-size:11px;color:var(--dim);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.aiRow input,.aiRow select{width:100%}
+#sheet{max-width:100%;border-radius:8px;border:1px solid var(--line);margin-top:8px}
+
+button.linkish{background:none;border:0;padding:0;color:var(--accent2);cursor:pointer;font:inherit;text-decoration:underline}
+dialog#policyInfo{border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--tx);
+  max-width:680px;width:calc(100% - 32px);padding:0}
+dialog#policyInfo::backdrop{background:#000a;backdrop-filter:blur(2px)}
+.pi-head{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line)}
+.pi-head h3{margin:0;font-size:15px}
+.pi-body{padding:16px 20px;max-height:70vh;overflow:auto}
+.pi-body h4{margin:16px 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+.pi-body h4:first-child{margin-top:0}
+.pi-body p,.pi-body li{font-size:13px;line-height:1.55;color:#b8c0d4;margin:6px 0}
+.pi-body ul{margin:6px 0;padding-left:18px}
+.pi-body b{color:var(--tx)}
+.pi-body a{color:var(--accent2)}
+.pi-foot{padding:12px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end}
+#log{font:12px/1.55 ui-monospace,Menlo,Consolas,monospace;max-height:220px;overflow:auto;color:var(--dim)}
+#log .e{color:var(--bad)} #log .s{color:var(--ok)} #log .w{color:var(--warn)}
+#fileBanner{display:none;background:#3a2a10;color:#ffd27a;padding:10px 20px;font-size:13px}
+</style>
+</head>
+<body>
+
+<div id="fileBanner">This page was opened from disk, so its modules cannot load. Run <code>node engine/serve.mjs 8099</code> and open <code>http://localhost:8099/</code>.</div>
+<script>if (location.protocol === 'file:') document.getElementById('fileBanner').style.display = 'block';</script>
+
+<header>
+  <div class="logo">Re<span>·</span>Playable</div>
+</header>
+
+<main>
+  <div class="card">
+    <div id="drop">
+      <b>Drop playables here — one or many</b>
+      <small>.html exported for AppLovin / MRAID / ironSource / Meta, or a Google .zip · nothing leaves your machine</small>
+    </div>
+    <input type="file" id="file" multiple accept=".html,.htm,.zip" hidden>
+    <p class="hint" style="margin:14px 0 0">The first step in taking a finished playable to Google Ads. Each file is scored against the
+      App-campaign spec and the Google Ads policies, and <b>Fix all</b> converts what can be converted without a person: the exit call, the
+      SDK stand-in, the exitapi.js tag, storage, dialogs, sound before touch, metas and filenames. What it cannot decide is listed per file
+      for you to judge. The result is a file with a far better chance of running correctly and staying clear of policy trouble. That is an
+      improvement in the odds, not a promise of approval.</p>
+  </div>
+
+  <div class="card" id="listCard" style="display:none">
+    <h2>Files <span class="spacer"></span><button class="ghost mini" id="btnClear">Clear</button></h2>
+    <div class="summary" id="summary"></div>
+    <!-- The actions sit with the files they act on, rather than in the header. -->
+    <div class="actionbar">
+      <label for="orient">Orientation</label>
+      <select id="orient" title="Value written to &lt;meta name=&quot;ad.orientation&quot;&gt;">
+        <option value="auto">Keep file's own · portrait if missing</option>
+        <option value="portrait">Portrait</option>
+        <option value="landscape">Landscape</option>
+        <option value="portrait,landscape">Both</option>
+      </select>
+      <span class="spacer"></span>
+      <button class="ghost" id="btnDlAll" disabled>Download all</button>
+      <button class="act" id="btnFixAll" disabled>Fix all</button>
+    </div>
+    <div style="overflow-x:auto">
+    <table>
+      <thead><tr><th>Playable</th><th>Readiness</th><th>Findings</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    </div>
+  </div>
+
+  <div class="grid" id="detailGrid" style="display:none">
+    <div class="card" id="detail"></div>
+    <div>
+      <div class="card">
+        <h2>Preview <span class="spacer"></span><button class="ghost mini" id="btnReplay">Replay</button></h2>
+        <div class="deviceWrap" id="deviceWrap">
+          <div class="device" id="device"><iframe id="frame" title="playable preview" scrolling="no" sandbox="allow-scripts allow-same-origin allow-pointer-lock"></iframe></div>
+          <div class="toast" id="toast">✓ Exit fired — the click reaches Google</div>
+        </div>
+        <p class="hint" style="margin:10px 0 0">Tap the CTA. The green badge means the click reached <code>ExitApi.exit()</code>, which is the only thing Google counts.</p>
+      </div>
+
+      <div class="card">
+        <h2>Optional · AI policy review <span class="spacer"></span><button class="ghost mini" id="btnPolicyInfo">How it works</button></h2>
+        <p class="hint" style="margin:0">An AI reads your creative's artwork and text and cross-checks it against the
+          <a href="https://support.google.com/adspolicy/answer/6008942?hl=en" target="_blank" rel="noopener" style="color:var(--accent2)">Google Ads policies</a>.
+          Off until you paste a key. <button class="linkish" id="btnPolicyInfo2">See exactly what is sent and how it is judged.</button></p>
+        <div class="aiRow">
+          <div><label>AI service</label><select id="provider"></select></div>
+          <div><label>API key</label><input type="password" id="apiKey" placeholder="paste to enable" autocomplete="off"></div>
+          <div><label>Model</label><select id="model"></select></div>
+          <div><label>Custom model id (optional)</label><input type="text" id="modelCustom" placeholder="overrides the dropdown"></div>
+          <div id="endpointRow" style="display:none"><label>Endpoint base URL</label><input type="text" id="endpoint" placeholder="https://openrouter.ai/api/v1"><div class="hint" id="endpointNote" style="margin-top:4px"></div></div>
+        </div>
+        <label class="hint" style="display:flex;gap:7px;align-items:center;margin-top:10px;cursor:pointer">
+          <input type="checkbox" id="sendImages" checked style="width:auto;margin:0">
+          <span id="sendImagesNote">Send the contact sheet so the model can judge the art</span>
+        </label>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button class="ghost" id="btnAiOne" disabled>Review selected file</button>
+          <button class="ghost" id="btnAiAll" disabled>Review all files</button>
+        </div>
+        <details id="sheetBox" style="margin-top:8px;display:none"><summary>What the model saw</summary><img id="sheet" alt="contact sheet"></details>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Log</h2>
+    <div id="log"></div>
+  </div>
+
+  <dialog id="policyInfo">
+    <div class="pi-head">
+      <h3>How the AI policy review works</h3>
+      <span class="spacer"></span>
+      <button class="ghost mini" id="btnPolicyClose">Close</button>
+    </div>
+    <div class="pi-body">
+      <h4>What it does</h4>
+      <p>An AI looks at your creative the way a reviewer would, and cross-checks it against the
+        <a href="https://support.google.com/adspolicy/answer/6008942?hl=en" target="_blank" rel="noopener">Google Ads policies</a>:
+        prohibited content, prohibited practices, restricted content, and editorial and technical standards.</p>
+      <p>This matters most for playables that <b>draw their words instead of writing them</b>. A canvas creative renders every
+        headline and button label into an image, so the automatic copy checks have nothing to read. The AI is the only pass here
+        that can see those words.</p>
+
+      <h4>What gets sent</h4>
+      <ul>
+        <li>Every visible text string found in the file.</li>
+        <li><b>One downscaled contact sheet</b> of the creative's largest images, numbered so a finding can point at one. You can
+          see the exact sheet under “What the model saw” after a review.</li>
+        <li>Google's policy text, so the model judges against the policies rather than its own recollection.</li>
+      </ul>
+      <p>The file itself is never sent, and neither is full-resolution artwork.</p>
+
+      <h4>How findings are judged</h4>
+      <p>The model is told to judge only against the supplied policy text, and to quote the sentence it is relying on. Each quote is
+        checked against the source before it is shown, so a paraphrased or invented one loses its claim to be Google's wording and is
+        marked <b>unsourced</b> instead. Treat unsourced findings as a prompt to check, not as a rule.</p>
+      <p id="piProvenance" class="hint"></p>
+
+      <h4>Your key</h4>
+      <ul>
+        <li>Nothing is sent until you paste a key and press a review button.</li>
+        <li>The key goes straight from this page to the service you chose, and nowhere else.</li>
+        <li>It is remembered only in this browser, separately per service.</li>
+        <li><b>Usually the key alone is enough.</b> A Google, Anthropic or Zhipu key identifies its own service, and each service
+          already has a model selected. Only a bare <code>sk-…</code> is ambiguous, because OpenAI, Kimi and Qwen share that shape,
+          so pick the service yourself in that case.</li>
+        <li>Every model offered reads images, because judging the artwork is the point.</li>
+      </ul>
+
+      <h4>What it is not</h4>
+      <p>Findings are advisory and <b>never change the readiness score</b>, which stays deterministic and reproducible. The AI can
+        miss things and can be wrong. It raises the odds of catching a policy problem before Google does; it does not promise
+        an approval.</p>
+    </div>
+    <div class="pi-foot"><button class="act" id="btnPolicyClose2">Got it</button></div>
+  </dialog>
+</main>
+
+<script type="module">
+import { audit } from './engine/audit.mjs';
+import { fixAll, sanitizeName, reroot, pickEntry } from './engine/convert.mjs';
+import { score } from './engine/score.mjs';
+import { readZip, writeZip } from './engine/zip.mjs';
+import { contactSheet, review, supportsVision, detectProvider, PROVIDERS, DEFAULT_PROVIDER, POLICY_SOURCE } from './engine/aiscan.mjs';
+
+const $ = (id) => document.getElementById(id);
+// Browser storage can be absent or throw (private windows, sandboxed previews); the page must not care.
+const store = {
+  get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* remembered for this session only */ } },
+};
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const MBs = (n) => n < 102400 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(2) + ' MB';
+const resolvedCount = (f) => { const after = new Set((f.after?.findings || []).map((x) => x.id)); return f.before.findings.filter((x) => !after.has(x.id)).length; };
+
+/* ---------- state ---------- */
+const S = { files: [], sel: -1, fixed: false };
+
+function log(msg, cls = '') {
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.textContent = `${new Date().toLocaleTimeString()}  ${msg}`;
+  $('log').appendChild(d);
+  $('log').scrollTop = $('log').scrollHeight;
+}
+
+/* ---------- options ---------- */
+function orientationOpts() {
+  const v = $('orient').value;
+  return v === 'auto' ? { orientation: 'portrait', forceOrientation: false } : { orientation: v, forceOrientation: true };
+}
+$('orient').value = store.get('rp_orient') || 'auto';
+$('orient').addEventListener('change', async () => {
+  store.set('rp_orient', $('orient').value);
+  if (S.fixed) { await fixEverything(); }
+});
+
+/* ---------- ingest ---------- */
+$('drop').addEventListener('click', () => $('file').click());
+$('file').addEventListener('change', (e) => addFiles([...e.target.files]));
+['dragenter', 'dragover'].forEach((ev) => $('drop').addEventListener(ev, (e) => { e.preventDefault(); $('drop').classList.add('hot'); }));
+['dragleave', 'drop'].forEach((ev) => $('drop').addEventListener(ev, (e) => { e.preventDefault(); $('drop').classList.remove('hot'); }));
+$('drop').addEventListener('drop', (e) => addFiles([...e.dataTransfer.files]));
+document.addEventListener('dragover', (e) => e.preventDefault());
+document.addEventListener('drop', (e) => e.preventDefault());
+
+async function addFiles(list) {
+  const files = list.filter((f) => /\.(html?|zip)$/i.test(f.name));
+  if (!files.length) return log('nothing usable dropped — .html or .zip only', 'w');
+  for (const file of files) {
+    try {
+      const item = await ingest(file);
+      S.files.push(item);
+      log(`${item.name}: ${item.network} · readiness ${item.before.score.pct}% · ${item.before.findings.length} finding(s)`, item.before.score.counts.blocker ? 'w' : 's');
+    } catch (err) {
+      log(`${file.name}: ${err.message}`, 'e');
+    }
+  }
+  if (S.fixed) await fixEverything(); else render();
+  if (S.sel < 0 && S.files.length) select(0);
+}
+
+async function ingest(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let entries, entryName, html, kind;
+  if (/\.zip$/i.test(file.name)) {
+    kind = 'zip';
+    entries = await readZip(bytes);
+    const entry = pickEntry(entries);
+    if (!entry) throw new Error('no .html inside the ZIP');
+    entryName = entry.name;
+    html = new TextDecoder().decode(entry.bytes);
+  } else {
+    kind = 'html';
+    html = new TextDecoder().decode(bytes);
+    entryName = sanitizeName(file.name.replace(/\.htm$/i, '.html')) || 'index.html';
+    entries = [{ name: entryName, bytes, size: bytes.length, stored: false }];
+  }
+  const base = file.name.replace(/\.(html?|zip)$/i, '');
+  const item = { name: file.name, base, kind, entries, entryName, html, bytes, fixedHtml: null, applied: [], out: null, ai: null };
+  item.before = await measure(item, html, entries, kind === 'zip' ? bytes.length : null);
+  item.network = item.before.info.primary ? item.before.info.primary.label : (item.before.info.networks[0]?.label || 'unknown SDK');
+  return item;
+}
+
+/**
+ * Audit a document as it would upload: deflated. For a raw HTML we pack it to
+ * learn the size; for a ZIP that arrived stored we still report its real size
+ * (that is what Google would see if uploaded as-is).
+ */
+async function measure(item, html, entries, knownZipBytes) {
+  let zipBytes = knownZipBytes;
+  if (zipBytes == null) zipBytes = (await writeZip([{ name: item.entryName, bytes: new TextEncoder().encode(html) }])).length;
+  const a = audit(html, { zipBytes, entries: entries.map((e) => ({ name: e.name, size: e.size, stored: e.stored })), entryName: item.entryName }, orientationOpts());
+  return { ...a, score: score(a.findings), zipBytes };
+}
+
+/* ---------- fix ---------- */
+$('btnFixAll').addEventListener('click', fixEverything);
+
+async function fixEverything() {
+  const opts = orientationOpts();
+  $('btnFixAll').disabled = true;
+  for (const item of S.files) {
+    try {
+      const r = fixAll(item.html, opts);
+      item.fixedHtml = r.html;
+      item.applied = r.applied;
+      item.reverted = r.reverted;
+      item.verified = r.verified;
+      // A reverted fixer means a rewrite would have broken this file's JavaScript.
+      // The finding it was meant to resolve stays on the list for a human.
+      for (const rv of r.reverted) log(`${item.name}: skipped "${rv.id}" — it would have broken the script (${rv.error})`, 'w');
+      // package: reroot + sanitise names, swap in the fixed entry, deflate
+      let entries = reroot(item.entries).map((e) => ({ ...e, name: sanitizeName(e.name) }));
+      const entryName = sanitizeName(reroot([{ name: item.entryName }])[0].name);
+      entries = entries.map((e) => e.name === entryName ? { ...e, bytes: new TextEncoder().encode(r.html), size: r.html.length, stored: false } : e);
+      const zip = await writeZip(entries.map((e) => ({ name: e.name, bytes: e.bytes })));
+      item.out = { zip, entries, entryName, name: (sanitizeName(item.base) || 'playable') + '_google.zip' };
+      item.after = { ...audit(r.html, { zipBytes: zip.length, entries: entries.map((e) => ({ name: e.name, size: e.size, stored: false })), entryName }, opts) };
+      item.after.score = score(item.after.findings);
+      item.after.zipBytes = zip.length;
+      log(`${item.name}: fixed ${r.applied.length} thing(s) → ${item.after.score.pct}% · ${MBs(zip.length)} · ${item.after.findings.length} left for a human`, item.after.score.counts.blocker ? 'w' : 's');
+    } catch (err) {
+      log(`${item.name}: fix failed — ${err.message}`, 'e');
+    }
+  }
+  S.fixed = true;
+  render();
+  if (S.sel > -1) select(S.sel);
+}
+
+/* ---------- render ---------- */
+function pctClass(p) { return p >= 90 ? 'ok' : p >= 60 ? 'warn' : 'bad'; }
+
+function render() {
+  const has = S.files.length > 0;
+  $('listCard').style.display = has ? '' : 'none';
+  $('detailGrid').style.display = has ? '' : 'none';
+  $('btnFixAll').disabled = !has;
+  $('btnDlAll').disabled = !has;
+  $('btnAiOne').disabled = !has || !$('apiKey').value.trim();
+  $('btnAiAll').disabled = !has || !$('apiKey').value.trim();
+  if (!has) { $('rows').innerHTML = ''; $('summary').innerHTML = ''; return; }
+
+  const cur = (f) => (S.fixed && f.after ? f.after : f.before);
+  const avg = (k) => Math.round(S.files.reduce((n, f) => n + (f[k] ? f[k].score.pct : 0), 0) / S.files.length);
+  // What a person still has to do. Blockers the converter clears on its own are
+  // not this number, or pressing Fix all would never move it.
+  const mustFix = S.files.reduce((n, f) => n + (cur(f)?.score.mustFix || 0), 0);
+  const ready = S.files.filter((f) => cur(f)?.score.verdict.tone === 'ok').length;
+  $('summary').innerHTML = `
+    <div class="stat"><small>Files</small><b>${S.files.length}</b></div>
+    <div class="stat"><small>Avg readiness</small><b class="${pctClass(avg('before'))}">${avg('before')}%</b>${S.fixed ? ` <span class="arrow">→</span> <b class="${pctClass(avg('after'))}">${avg('after')}%</b>` : ''}</div>
+    <div class="stat"><small>Ready to upload</small><b>${ready} / ${S.files.length}</b></div>
+    <div class="stat" title="Blockers with no automatic fix"><small>Needs a person</small><b style="color:${mustFix ? 'var(--bad)' : 'var(--ok)'}">${mustFix}</b></div>`;
+
+  $('rows').innerHTML = S.files.map((f, i) => {
+    const cur = S.fixed && f.after ? f.after : f.before;
+    const c = cur.score.counts;
+    const fixable = f.before.findings.filter((x) => x.fix).length;
+    const blockerChip = cur.score.mustFix
+      ? `<span class="chip blocker">${cur.score.mustFix} needs a person</span>`
+      : cur.score.autoFix ? `<span class="chip warn">${cur.score.autoFix} Fix all clears</span>`
+      : `<span class="chip ok">nothing blocking</span>`;
+    const chips = blockerChip
+      + (c.warn ? `<span class="chip warn">${c.warn} to review</span>` : '')
+      + (c.advice ? `<span class="chip advice">${c.advice} advice</span>` : '')
+      + (S.fixed ? `<span class="chip">${resolvedCount(f)} fixed</span>` : (fixable ? `<span class="chip">${fixable} auto-fixable</span>` : ''))
+      + (f.ai ? `<span class="chip ai">AI: ${f.ai.length} concern${f.ai.length === 1 ? '' : 's'}</span>` : '');
+    return `<tr class="file${i === S.sel ? ' sel' : ''}" data-i="${i}">
+      <td><div class="name">${esc(f.name)}</div><div class="net">${esc(f.network)} · ${f.kind === 'zip' ? f.entries.length + ' file(s) · ' : ''}${MBs(f.before.zipBytes)} deflated</div></td>
+      <td><span class="pct ${S.fixed ? 'dim' : pctClass(f.before.score.pct)}">${f.before.score.pct}%</span>${S.fixed && f.after ? `<span class="arrow">→</span><span class="pct ${pctClass(f.after.score.pct)}">${f.after.score.pct}%</span>` : ''}</td>
+      <td><div class="chips">${chips}</div></td>
+      <td><div class="acts"><button class="ghost mini" data-act="preview" data-i="${i}">Preview</button><button class="ghost mini" data-act="dl" data-i="${i}" ${f.out ? '' : 'disabled title="Press Fix all first"'}>.zip</button></div></td>
+    </tr>`;
+  }).join('');
+}
+
+$('rows').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-act]');
+  if (btn) {
+    const i = Number(btn.dataset.i);
+    if (btn.dataset.act === 'preview') { select(i); renderPreview(); }
+    if (btn.dataset.act === 'dl') downloadOne(S.files[i]);
+    return;
+  }
+  const tr = e.target.closest('tr.file');
+  if (tr) select(Number(tr.dataset.i));
+});
+
+$('btnClear').addEventListener('click', () => { S.files = []; S.sel = -1; S.fixed = false; render(); $('detail').innerHTML = ''; $('frame').src = 'about:blank'; });
+
+function select(i) {
+  S.sel = i;
+  render();
+  renderDetail();
+  renderPreview();
+}
+
+function findingHtml(x, { done = false } = {}) {
+  const sev = done ? 'ok' : x.severity;
+  return `<div class="f${done ? ' done' : ''}">
+    <div class="t"><span class="chip ${sev}">${done ? 'fixed' : x.severity}</span><b>${esc(x.title)}</b>
+      <span class="area">${esc(x.area === 'technical' ? 'Technical' : x.area)}</span>
+      ${!done && x.fix ? '<span class="fixlabel">auto-fixable</span>' : ''}${x.source === 'ai' ? '<span class="chip ai">AI</span>' : ''}</div>
+    <div class="d">${esc(x.detail)}</div>
+    ${x.measured ? `<div class="m">found: <i>${esc(x.measured)}</i></div>` : ''}
+    ${!done && x.manual ? `<div class="m">to do: <i>${esc(x.manual)}</i></div>` : ''}
+    ${x.quote ? `<div class="q">Google: “${esc(x.quote)}”</div>`
+      : (x.area && x.area !== 'technical' && !done ? '<div class="m unsourced">Not stated on the policy page loaded into this tool. Treat as a prompt to check, not as Google\'s wording.</div>' : '')}
+  </div>`;
+}
+
+function renderDetail() {
+  const f = S.files[S.sel];
+  if (!f) { $('detail').innerHTML = ''; return; }
+  const cur = S.fixed && f.after ? f.after : f.before;
+  const parts = [];
+  parts.push(`<h2>${esc(f.name)} <span class="spacer"></span>${f.out ? `<button class="ghost mini" id="btnDlSel">Download ${esc(f.out.name)}</button>` : ''}</h2>`);
+  parts.push(`<div class="headline"><div class="big ${pctClass(cur.score.pct)}" style="color:var(--${pctClass(cur.score.pct)})">${cur.score.pct}%</div>
+    <div><div class="verdict ${cur.score.verdict.tone}">${esc(cur.score.verdict.label)}</div>
+    <div class="hint">${esc(f.network)} · ${MBs(cur.zipBytes)} deflated of 5 MB${S.fixed && f.after ? ` · was ${f.before.score.pct}% before Fix all` : ''}</div></div></div>`);
+
+  if (S.fixed && f.after) {
+    const afterIds = new Set(f.after.findings.map((x) => x.id));
+    const resolved = f.before.findings.filter((x) => !afterIds.has(x.id));
+    parts.push(`<div class="group">Still needs a human · ${f.after.findings.length}</div>`);
+    parts.push(f.after.findings.length ? f.after.findings.map((x) => findingHtml(x)).join('') : '<div class="hint">Nothing. Upload the .zip to Google\'s HTML5 validator for the final check.</div>');
+    if (f.ai) {
+      parts.push(`<div class="group">AI policy review · ${f.ai.length} concern${f.ai.length === 1 ? '' : 's'} (advisory)</div>`);
+      parts.push(f.ai.length ? f.ai.map((x) => findingHtml(x)).join('') : '<div class="hint">The model raised nothing.</div>');
+    }
+    parts.push(`<div class="group">Fixed automatically · ${resolved.length}</div>`);
+    parts.push(resolved.length ? resolved.map((x) => findingHtml(x, { done: true })).join('') : '<div class="hint">Nothing needed fixing.</div>');
+    if (f.reverted && f.reverted.length) {
+      parts.push(`<div class="group">Skipped to protect the file · ${f.reverted.length}</div>`);
+      parts.push(f.reverted.map((rv) => `<div class="f"><div class="t"><span class="chip warn">skipped</span><b>${esc(rv.id)}</b></div>
+        <div class="d">This rewrite would have produced JavaScript that does not parse, which renders the ad blank. It was dropped and the file left as it was.</div>
+        <div class="m">would have caused: <i>${esc(rv.error)}</i></div></div>`).join(''));
+    }
+    parts.push(`<details style="margin-top:10px"><summary>What the converter did (${f.applied.length})${f.verified === false ? ' · output not parse-checked here' : ''}</summary><div class="hint" style="margin-top:6px">${f.applied.map((a) => `<code>${esc(a)}</code>`).join(' ') || 'nothing'}</div></details>`);
+  } else {
+    const auto = f.before.findings.filter((x) => x.fix), manual = f.before.findings.filter((x) => !x.fix);
+    parts.push(`<div class="group">Fix all will handle · ${auto.length}</div>`);
+    parts.push(auto.length ? auto.map((x) => findingHtml(x)).join('') : '<div class="hint">Nothing automatic to do.</div>');
+    parts.push(`<div class="group">Needs a human · ${manual.length}</div>`);
+    parts.push(manual.length ? manual.map((x) => findingHtml(x)).join('') : '<div class="hint">Nothing.</div>');
+    if (f.ai) {
+      parts.push(`<div class="group">AI policy review · ${f.ai.length} (advisory)</div>`);
+      parts.push(f.ai.length ? f.ai.map((x) => findingHtml(x)).join('') : '<div class="hint">The model raised nothing.</div>');
+    }
+  }
+  $('detail').innerHTML = parts.join('');
+  const b = $('btnDlSel');
+  if (b) b.addEventListener('click', () => downloadOne(f));
+}
+
+/* ---------- preview ----------
+   Written straight into the iframe, not loaded from a blob: URL — playable
+   wrappers resolve assets with `new URL(path, base)` and a blob: base throws.
+   exitapi.js is swapped for a stub that reports the click back to this page. */
+const EXIT_STUB = '<script>window.ExitApi={exit:function(){try{parent.postMessage({rp:"exit"},"*")}catch(e){}}};window.addEventListener("error",function(e){try{parent.postMessage({rp:"err",msg:(e&&e.message)||String(e),line:e&&e.lineno,col:e&&e.colno},"*")}catch(er){}});<\/script>';
+function previewHtml(f) {
+  let html = S.fixed && f.fixedHtml ? f.fixedHtml : f.html;
+  if (/<script[^>]+exitapi\.js[^>]*>\s*<\/script>/i.test(html)) html = html.replace(/<script[^>]+exitapi\.js[^>]*>\s*<\/script>/i, EXIT_STUB);
+  else html = html.replace(/<head[^>]*>/i, (m) => m + EXIT_STUB);
+  return html;
+}
+function deviceSize(f) {
+  const html = S.fixed && f.fixedHtml ? f.fixedHtml : f.html;
+  const m = /<meta[^>]+name=["']?ad\.orientation["']?[^>]*content=["']?([^"'>]+)/i.exec(html);
+  const first = m ? m[1].trim().split(',')[0].trim().toLowerCase() : ($('orient').value === 'landscape' ? 'landscape' : 'portrait');
+  return first === 'landscape' ? [640, 360] : [360, 640];
+}
+function renderPreview() {
+  const f = S.files[S.sel];
+  if (!f) return;
+  const [w, h] = deviceSize(f);
+  const dev = $('device'), wrap = $('deviceWrap');
+  dev.style.width = w + 12 + 'px'; dev.style.height = h + 12 + 'px';
+  const k = Math.min(1, (wrap.clientWidth - 8) / (w + 12));
+  dev.style.transform = `scale(${k})`;
+  wrap.style.height = Math.ceil((h + 12) * k) + 'px';
+  // A fresh iframe has a synchronous about:blank document, so writing into it
+  // needs no load event — and no load event means no race between two previews.
+  const old = $('frame');
+  const fr = document.createElement('iframe');
+  fr.id = 'frame'; fr.title = 'playable preview'; fr.scrolling = 'no';
+  fr.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-pointer-lock');
+  old.replaceWith(fr);
+  const d = fr.contentDocument;
+  d.open(); d.write(previewHtml(f)); d.close();
+}
+window.addEventListener('message', (e) => {
+  if (e.data && e.data.rp === 'exit') {
+    $('toast').classList.add('show');
+    setTimeout(() => $('toast').classList.remove('show'), 2200);
+    log('preview: ExitApi.exit() fired — store click registered', 's');
+  }
+  if (e.data && e.data.rp === 'err') {
+    log(`preview script error: ${e.data.msg}${e.data.line ? ' (line ' + e.data.line + ')' : ''}`, 'e');
+  }
+});
+$('btnReplay').addEventListener('click', renderPreview);
+window.addEventListener('resize', () => { if (S.sel > -1) renderPreview(); });
+
+/* ---------- download ----------
+   Inside the claude.ai viewer a page cannot start a download itself; it asks
+   the host to offer the file. Anywhere else, a plain download link. */
+let hostDl;
+async function hostDownloads() {
+  if (hostDl !== undefined) return hostDl;
+  hostDl = null;
+  try { if (window.claude && typeof window.claude.use === 'function') hostDl = await window.claude.use('downloads'); } catch { hostDl = null; }
+  return hostDl;
+}
+async function save(bytes, name) {
+  const cap = await hostDownloads();
+  if (cap) {
+    try { await cap.save({ filename: name, data: new Blob([bytes], { type: 'application/zip' }) }); return true; }
+    catch (err) {
+      const code = err && err.code;
+      log(`${name}: ${code === 'declined' ? 'save declined' : (err && (err.message || code)) || 'save failed'}`, 'w');
+      return false;
+    }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' }));
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  return true;
+}
+async function downloadOne(f) {
+  if (!f.out) return log(`${f.name}: press Fix all first`, 'w');
+  if (await save(f.out.zip, f.out.name)) log(`${f.out.name}: ${MBs(f.out.zip.length)}`, 's');
+}
+$('btnDlAll').addEventListener('click', async () => {
+  if (!S.fixed) await fixEverything();
+  const files = S.files.filter((f) => f.out).map((f) => ({ name: f.out.name, bytes: f.out.zip }));
+  files.push({ name: 'readiness-report.csv', bytes: new TextEncoder().encode(reportCsv()) });
+  const bundle = await writeZip(files);
+  if (await save(bundle, 'playables_google.zip')) log(`bundle: ${files.length - 1} playable(s) + report · ${MBs(bundle.length)}`, 's');
+});
+function reportCsv() {
+  const q = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
+  const rows = [['file', 'source network', 'readiness before', 'readiness after', 'blockers left', 'warnings left', 'fixed automatically', 'needs a human', 'ai concerns']];
+  for (const f of S.files) {
+    const a = f.after;
+    rows.push([f.name, f.network, f.before.score.pct + '%', a ? a.score.pct + '%' : '', a ? a.score.counts.blocker : '', a ? a.score.counts.warn : '',
+      f.applied.join('; '), (a ? a.findings : f.before.findings.filter((x) => !x.fix)).map((x) => x.title).join('; '),
+      f.ai ? f.ai.map((x) => `${x.severity}: ${x.title}`).join('; ') : '']);
+  }
+  return rows.map((r) => r.map(q).join(',')).join('\r\n');
+}
+
+/* ---------- optional AI review ----------
+   Provider-neutral: the key and model are remembered per service, in this
+   browser only. Nothing is sent until a review button is pressed. */
+const prov = $('provider');
+prov.innerHTML = Object.entries(PROVIDERS).map(([id, p]) => `<option value="${id}">${esc(p.label)}</option>`).join('');
+prov.value = store.get('rp_provider') || DEFAULT_PROVIDER;
+if (!PROVIDERS[prov.value]) prov.value = DEFAULT_PROVIDER;
+function currentModel() { return $('modelCustom').value.trim() || $('model').value; }
+/**
+ * A text-only model gets the copy alone; the checkbox says so rather than
+ * failing later. The operator's own preference is held separately, so passing
+ * through a text-only model does not silently switch images off for good.
+ */
+let wantsImages = store.get('rp_send_images') !== '0';
+function syncVision() {
+  const blind = !supportsVision(prov.value, currentModel());
+  const box = $('sendImages');
+  box.disabled = blind;
+  box.checked = blind ? false : wantsImages;
+  $('sendImagesNote').textContent = blind
+    ? 'That model id reads text only, so the art would not be checked — pick another'
+    : 'Send the contact sheet so the model can judge the art';
+}
+$('sendImages').addEventListener('change', (e) => {
+  if (e.target.disabled) return;
+  wantsImages = e.target.checked;
+  store.set('rp_send_images', wantsImages ? '1' : '0');
+});
+function syncProvider() {
+  const id = prov.value, p = PROVIDERS[id];
+  store.set('rp_provider', id);
+  $('model').innerHTML = p.models.map((m) => `<option value="${m.id}">${esc(m.label)}</option>`).join('') || '<option value="">— type the model id below —</option>';
+  $('model').value = store.get('rp_model_' + id) || p.defaultModel;
+  $('modelCustom').value = store.get('rp_model_custom_' + id) || '';
+  $('apiKey').value = store.get('rp_key_' + id) || (id === 'gemini' ? store.get('rp_key') : '') || '';
+  $('apiKey').placeholder = p.keyHint;
+  // Preset endpoints stay editable: several services have separate China and international hosts.
+  $('endpointRow').style.display = (p.needsEndpoint || p.endpoint) ? '' : 'none';
+  $('endpoint').value = store.get('rp_endpoint_' + id) || p.endpoint || '';
+  $('endpointNote').textContent = p.endpointNote || '';
+  syncVision();
+  render();
+}
+prov.addEventListener('change', syncProvider);
+$('apiKey').addEventListener('input', () => {
+  const key = $('apiKey').value.trim();
+  // Google, Anthropic and Zhipu keys identify themselves, so pasting one is
+  // enough. A bare sk-… belongs to several services and cannot be told apart.
+  const guess = detectProvider(key);
+  if (guess && guess !== prov.value) {
+    prov.value = guess;
+    store.set('rp_key_' + guess, key);
+    syncProvider();
+    log(`AI service set to ${PROVIDERS[guess].label} from the key you pasted`);
+    return;
+  }
+  store.set('rp_key_' + prov.value, key);
+  render();
+});
+$('model').addEventListener('change', () => { store.set('rp_model_' + prov.value, $('model').value); syncVision(); });
+$('modelCustom').addEventListener('input', () => { store.set('rp_model_custom_' + prov.value, $('modelCustom').value.trim()); syncVision(); });
+$('endpoint').addEventListener('input', () => store.set('rp_endpoint_' + prov.value, $('endpoint').value.trim()));
+syncProvider();
+
+async function aiReview(f) {
+  const provider = prov.value;
+  const key = $('apiKey').value.trim();
+  if (!key) throw new Error('paste an API key first');
+  const model = currentModel();
+  const html = S.fixed && f.fixedHtml ? f.fixedHtml : f.html;
+  const src = S.fixed && f.after ? f.after : f.before;
+  const wantImages = $('sendImages').checked && supportsVision(provider, model);
+  let sheet = null;
+  if (wantImages) {
+    log(`${f.name}: building contact sheet…`);
+    sheet = await contactSheet(html);
+    if (sheet && S.files[S.sel] === f) { $('sheet').src = sheet.dataUrl; $('sheetBox').style.display = ''; }
+  }
+  log(`${f.name}: asking ${PROVIDERS[provider].label} · ${model} (${src.text.length} strings, ${sheet ? sheet.count : 0} images)…`);
+  const r = await review({
+    provider, key, model, endpoint: $('endpoint').value.trim(), sendImages: wantImages,
+    texts: src.text, sheetB64: sheet ? sheet.b64 : null, imageCount: sheet ? sheet.count : 0,
+    network: f.network,
+  });
+  f.ai = r.findings;
+  log(`${f.name}: AI review — ${r.findings.length} concern(s) · ${r.usage.in} in / ${r.usage.out} out tokens${r.sawImages ? '' : ' · copy only'}`, r.findings.some((x) => x.severity === 'blocker') ? 'w' : 's');
+}
+$('btnAiOne').addEventListener('click', async () => {
+  const f = S.files[S.sel]; if (!f) return;
+  $('btnAiOne').disabled = true;
+  try { await aiReview(f); } catch (err) { log(`AI review failed: ${err.message}`, 'e'); }
+  $('btnAiOne').disabled = false; render(); renderDetail();
+});
+$('btnAiAll').addEventListener('click', async () => {
+  $('btnAiAll').disabled = true;
+  for (const f of S.files) { try { await aiReview(f); } catch (err) { log(`${f.name}: AI review failed: ${err.message}`, 'e'); } }
+  $('btnAiAll').disabled = false; render(); renderDetail();
+});
+
+/* ---------- policy review explainer ----------
+   The detail that used to sit in a paragraph nobody read. Kept out of the way
+   until asked for, because the operator only needs it once. */
+const policyDlg = $('policyInfo');
+$('piProvenance').textContent =
+  `Policy text captured from ${POLICY_SOURCE.url} on ${POLICY_SOURCE.captured}. That page is Google's overview; `
+  + 'each policy links to a detail page not included here, so a finding resting on one of those is marked unsourced.';
+const openPolicy = () => { try { policyDlg.showModal(); } catch { policyDlg.setAttribute('open', ''); } };
+const closePolicy = () => { try { policyDlg.close(); } catch { policyDlg.removeAttribute('open'); } };
+for (const id of ['btnPolicyInfo', 'btnPolicyInfo2']) $(id).addEventListener('click', openPolicy);
+for (const id of ['btnPolicyClose', 'btnPolicyClose2']) $(id).addEventListener('click', closePolicy);
+// Clicking the backdrop dismisses it, the way a modal is expected to behave.
+policyDlg.addEventListener('click', (e) => { if (e.target === policyDlg) closePolicy(); });
+
+render();
+log('ready — drop .html or .zip playables');
+</script>
+</body>
+</html>

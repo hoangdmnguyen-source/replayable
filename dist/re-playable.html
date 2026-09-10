@@ -1,0 +1,3200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Re-Playable</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{color-scheme:dark;
+  --bg:#0a0c12; --panel:#11141d; --panel2:#161a26; --line:#232838;
+  --tx:#e8ecf6; --dim:#8b93a8; --accent:#7c5cff; --accent2:#22d3ee;
+  --ok:#34d399; --warn:#fbbf24; --bad:#f87171;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,#141826,#0d1018);position:sticky;top:0;z-index:50;flex-wrap:wrap}
+.logo{font-weight:800;font-size:17px;letter-spacing:-.02em}
+.logo span{background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;
+  background-clip:text;-webkit-text-fill-color:transparent}
+.tag{font-size:11px;color:var(--dim);border:1px solid var(--line);padding:3px 8px;border-radius:99px}
+.spacer{flex:1}
+header label,.actionbar label{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.actionbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;
+  padding-bottom:14px;border-bottom:1px solid var(--line)}
+.actionbar select{min-width:210px}
+@media(max-width:620px){.actionbar .spacer{flex-basis:100%;height:0}}
+select,input[type=text],input[type=password]{background:var(--panel2);border:1px solid var(--line);color:var(--tx);
+  border-radius:8px;padding:8px 10px;font-size:12.5px;outline:none}
+select:focus,input:focus{border-color:var(--accent)}
+
+main{padding:18px;max-width:1400px;margin:0 auto}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px}
+.card h2{margin:0 0 12px;font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--dim);font-weight:700;
+  display:flex;align-items:center;gap:10px}
+.card h2 .spacer{flex:1}
+.hint{font-size:12px;color:var(--dim);line-height:1.5}
+.hint code,.f code{font:12px ui-monospace,Menlo,Consolas,monospace;background:#0d1018;padding:1px 5px;border-radius:5px;color:#c7cee0}
+
+#drop{border:2px dashed var(--line);border-radius:12px;padding:30px 16px;text-align:center;cursor:pointer;
+  transition:.15s;background:var(--panel2)}
+#drop:hover,#drop.hot{border-color:var(--accent);background:#191d2c}
+#drop b{display:block;font-size:15px;margin-bottom:4px}
+#drop small{color:var(--dim)}
+
+button{font:inherit}
+button.act{padding:10px 16px;border:0;border-radius:10px;font-weight:800;font-size:13px;cursor:pointer;color:#fff;
+  background:linear-gradient(90deg,var(--accent),#9d7bff);white-space:nowrap}
+button.act:disabled{opacity:.4;cursor:not-allowed}
+button.ghost{background:var(--panel2);border:1px solid var(--line);color:var(--tx);padding:7px 12px;border-radius:9px;
+  cursor:pointer;font-size:12.5px;font-weight:600}
+button.ghost:hover{border-color:#38405a}
+button.ghost:disabled{opacity:.4;cursor:not-allowed}
+button.mini{padding:5px 9px;font-size:11.5px}
+
+.summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.stat{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-width:120px}
+.stat small{display:block;font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.stat b{font-size:18px}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);text-align:left;padding:6px 8px;
+  border-bottom:1px solid var(--line);font-weight:700}
+td{padding:9px 8px;border-bottom:1px solid #1b2030;vertical-align:middle}
+tr.file{cursor:pointer}
+tr.file:hover td{background:#141826}
+tr.file.sel td{background:#181c2c}
+.name{font-weight:700;word-break:break-all}
+.net{font-size:11.5px;color:var(--dim)}
+.pct{font-weight:800;font-size:16px;font-variant-numeric:tabular-nums}
+.pct.ok{color:var(--ok)} .pct.warn{color:var(--warn)} .pct.bad{color:var(--bad)} .pct.dim{color:var(--dim);font-weight:600}
+.arrow{color:var(--dim);padding:0 4px}
+.chips{display:flex;gap:5px;flex-wrap:wrap}
+.chip{font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid var(--line);background:var(--panel2);color:var(--dim);white-space:nowrap}
+.chip.blocker{border-color:#5b2a2a;color:var(--bad)} .chip.warn{border-color:#5a4a1a;color:var(--warn)}
+.chip.advice{border-color:#2a3f5b;color:var(--accent2)} .chip.ok{border-color:#1f5a3f;color:var(--ok)} .chip.ai{border-color:#4a2a6b;color:#c4a6ff}
+.acts{display:flex;gap:6px;justify-content:flex-end}
+
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,420px);gap:16px;align-items:start}
+/* minmax(0,1fr), never a bare 1fr: a bare one keeps an auto minimum, so the
+   minified code excerpts in a finding push the column past the screen. */
+@media(max-width:980px){.grid{grid-template-columns:minmax(0,1fr)}}
+
+.headline{display:flex;align-items:center;gap:14px;margin-bottom:12px;flex-wrap:wrap}
+.big{font-size:40px;font-weight:900;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.verdict{font-weight:700}
+.verdict.ok{color:var(--ok)} .verdict.warn{color:var(--warn)} .verdict.bad{color:var(--bad)}
+.group{margin:14px 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);font-weight:700}
+.f{padding:9px 10px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;background:var(--panel2)}
+.f .t{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.f .t b{font-size:13px}
+.f .area{font-size:11px;color:var(--dim)}
+.f .d{font-size:12.5px;color:#b8c0d4;margin-top:4px}
+.f .m{font-size:12px;color:var(--dim);margin-top:3px;overflow-wrap:anywhere}
+.f .m i{color:#c7cee0;font-style:normal}
+.f.done{opacity:.75;border-style:dashed}
+.f.done .t b{text-decoration:line-through;text-decoration-color:#556}
+.f .fixlabel{font-size:11px;color:var(--ok);font-weight:700}
+.f .q{font-size:12px;color:#a9b4cc;margin-top:6px;padding-left:9px;
+  border-left:2px solid #3a4560;font-style:italic}
+.f .unsourced{color:#8a7a4a}
+
+.deviceWrap{display:flex;justify-content:center;align-items:flex-start;overflow:hidden;position:relative}
+.device{background:#000;border:6px solid #1c2130;border-radius:26px;overflow:hidden;box-shadow:0 20px 60px #0008;transform-origin:top center}
+.device iframe{width:100%;height:100%;border:0;display:block;overflow:hidden;background:#000}
+.toast{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:var(--ok);color:#052;padding:8px 14px;
+  border-radius:99px;font-weight:800;font-size:12.5px;box-shadow:0 8px 24px #0008;opacity:0;transition:.2s;pointer-events:none}
+.toast.show{opacity:1}
+
+details summary{cursor:pointer;color:var(--dim);font-size:12px;user-select:none}
+.aiRow{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+@media(max-width:700px){.aiRow{grid-template-columns:1fr}}
+.aiRow label{display:block;font-size:11px;color:var(--dim);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.aiRow input,.aiRow select{width:100%}
+#sheet{max-width:100%;border-radius:8px;border:1px solid var(--line);margin-top:8px}
+
+button.linkish{background:none;border:0;padding:0;color:var(--accent2);cursor:pointer;font:inherit;text-decoration:underline}
+dialog#policyInfo{border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--tx);
+  max-width:680px;width:calc(100% - 32px);padding:0}
+dialog#policyInfo::backdrop{background:#000a;backdrop-filter:blur(2px)}
+.pi-head{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line)}
+.pi-head h3{margin:0;font-size:15px}
+.pi-body{padding:16px 20px;max-height:70vh;overflow:auto}
+.pi-body h4{margin:16px 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+.pi-body h4:first-child{margin-top:0}
+.pi-body p,.pi-body li{font-size:13px;line-height:1.55;color:#b8c0d4;margin:6px 0}
+.pi-body ul{margin:6px 0;padding-left:18px}
+.pi-body b{color:var(--tx)}
+.pi-body a{color:var(--accent2)}
+.pi-foot{padding:12px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end}
+#log{font:12px/1.55 ui-monospace,Menlo,Consolas,monospace;max-height:220px;overflow:auto;color:var(--dim)}
+#log .e{color:var(--bad)} #log .s{color:var(--ok)} #log .w{color:var(--warn)}
+#fileBanner{display:none;background:#3a2a10;color:#ffd27a;padding:10px 20px;font-size:13px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Re<span>·</span>Playable</div>
+</header>
+
+<main>
+  <div class="card">
+    <div id="drop">
+      <b>Drop playables here — one or many</b>
+      <small>.html exported for AppLovin / MRAID / ironSource / Meta, or a Google .zip · nothing leaves your machine</small>
+    </div>
+    <input type="file" id="file" multiple accept=".html,.htm,.zip" hidden>
+    <p class="hint" style="margin:14px 0 0">The first step in taking a finished playable to Google Ads. Each file is scored against the
+      App-campaign spec and the Google Ads policies, and <b>Fix all</b> converts what can be converted without a person: the exit call, the
+      SDK stand-in, the exitapi.js tag, storage, dialogs, sound before touch, metas and filenames. What it cannot decide is listed per file
+      for you to judge. The result is a file with a far better chance of running correctly and staying clear of policy trouble. That is an
+      improvement in the odds, not a promise of approval.</p>
+  </div>
+
+  <div class="card" id="listCard" style="display:none">
+    <h2>Files <span class="spacer"></span><button class="ghost mini" id="btnClear">Clear</button></h2>
+    <div class="summary" id="summary"></div>
+    <!-- The actions sit with the files they act on, rather than in the header. -->
+    <div class="actionbar">
+      <label for="orient">Orientation</label>
+      <select id="orient" title="Value written to &lt;meta name=&quot;ad.orientation&quot;&gt;">
+        <option value="auto">Keep file's own · portrait if missing</option>
+        <option value="portrait">Portrait</option>
+        <option value="landscape">Landscape</option>
+        <option value="portrait,landscape">Both</option>
+      </select>
+      <span class="spacer"></span>
+      <button class="ghost" id="btnDlAll" disabled>Download all</button>
+      <button class="act" id="btnFixAll" disabled>Fix all</button>
+    </div>
+    <div style="overflow-x:auto">
+    <table>
+      <thead><tr><th>Playable</th><th>Readiness</th><th>Findings</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    </div>
+  </div>
+
+  <div class="grid" id="detailGrid" style="display:none">
+    <div class="card" id="detail"></div>
+    <div>
+      <div class="card">
+        <h2>Preview <span class="spacer"></span><button class="ghost mini" id="btnReplay">Replay</button></h2>
+        <div class="deviceWrap" id="deviceWrap">
+          <div class="device" id="device"><iframe id="frame" title="playable preview" scrolling="no" sandbox="allow-scripts allow-same-origin allow-pointer-lock"></iframe></div>
+          <div class="toast" id="toast">✓ Exit fired — the click reaches Google</div>
+        </div>
+        <p class="hint" style="margin:10px 0 0">Tap the CTA. The green badge means the click reached <code>ExitApi.exit()</code>, which is the only thing Google counts.</p>
+      </div>
+
+      <div class="card">
+        <h2>Optional · AI policy review <span class="spacer"></span><button class="ghost mini" id="btnPolicyInfo">How it works</button></h2>
+        <p class="hint" style="margin:0">An AI reads your creative's artwork and text and cross-checks it against the
+          <a href="https://support.google.com/adspolicy/answer/6008942?hl=en" target="_blank" rel="noopener" style="color:var(--accent2)">Google Ads policies</a>.
+          Off until you paste a key. <button class="linkish" id="btnPolicyInfo2">See exactly what is sent and how it is judged.</button></p>
+        <div class="aiRow">
+          <div><label>AI service</label><select id="provider"></select></div>
+          <div><label>API key</label><input type="password" id="apiKey" placeholder="paste to enable" autocomplete="off"></div>
+          <div><label>Model</label><select id="model"></select></div>
+          <div><label>Custom model id (optional)</label><input type="text" id="modelCustom" placeholder="overrides the dropdown"></div>
+          <div id="endpointRow" style="display:none"><label>Endpoint base URL</label><input type="text" id="endpoint" placeholder="https://openrouter.ai/api/v1"><div class="hint" id="endpointNote" style="margin-top:4px"></div></div>
+        </div>
+        <label class="hint" style="display:flex;gap:7px;align-items:center;margin-top:10px;cursor:pointer">
+          <input type="checkbox" id="sendImages" checked style="width:auto;margin:0">
+          <span id="sendImagesNote">Send the contact sheet so the model can judge the art</span>
+        </label>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button class="ghost" id="btnAiOne" disabled>Review selected file</button>
+          <button class="ghost" id="btnAiAll" disabled>Review all files</button>
+        </div>
+        <details id="sheetBox" style="margin-top:8px;display:none"><summary>What the model saw</summary><img id="sheet" alt="contact sheet"></details>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Log</h2>
+    <div id="log"></div>
+  </div>
+
+  <dialog id="policyInfo">
+    <div class="pi-head">
+      <h3>How the AI policy review works</h3>
+      <span class="spacer"></span>
+      <button class="ghost mini" id="btnPolicyClose">Close</button>
+    </div>
+    <div class="pi-body">
+      <h4>What it does</h4>
+      <p>An AI looks at your creative the way a reviewer would, and cross-checks it against the
+        <a href="https://support.google.com/adspolicy/answer/6008942?hl=en" target="_blank" rel="noopener">Google Ads policies</a>:
+        prohibited content, prohibited practices, restricted content, and editorial and technical standards.</p>
+      <p>This matters most for playables that <b>draw their words instead of writing them</b>. A canvas creative renders every
+        headline and button label into an image, so the automatic copy checks have nothing to read. The AI is the only pass here
+        that can see those words.</p>
+
+      <h4>What gets sent</h4>
+      <ul>
+        <li>Every visible text string found in the file.</li>
+        <li><b>One downscaled contact sheet</b> of the creative's largest images, numbered so a finding can point at one. You can
+          see the exact sheet under “What the model saw” after a review.</li>
+        <li>Google's policy text, so the model judges against the policies rather than its own recollection.</li>
+      </ul>
+      <p>The file itself is never sent, and neither is full-resolution artwork.</p>
+
+      <h4>How findings are judged</h4>
+      <p>The model is told to judge only against the supplied policy text, and to quote the sentence it is relying on. Each quote is
+        checked against the source before it is shown, so a paraphrased or invented one loses its claim to be Google's wording and is
+        marked <b>unsourced</b> instead. Treat unsourced findings as a prompt to check, not as a rule.</p>
+      <p id="piProvenance" class="hint"></p>
+
+      <h4>Your key</h4>
+      <ul>
+        <li>Nothing is sent until you paste a key and press a review button.</li>
+        <li>The key goes straight from this page to the service you chose, and nowhere else.</li>
+        <li>It is remembered only in this browser, separately per service.</li>
+        <li><b>Usually the key alone is enough.</b> A Google, Anthropic or Zhipu key identifies its own service, and each service
+          already has a model selected. Only a bare <code>sk-…</code> is ambiguous, because OpenAI, Kimi and Qwen share that shape,
+          so pick the service yourself in that case.</li>
+        <li>Every model offered reads images, because judging the artwork is the point.</li>
+      </ul>
+
+      <h4>What it is not</h4>
+      <p>Findings are advisory and <b>never change the readiness score</b>, which stays deterministic and reproducible. The AI can
+        miss things and can be wrong. It raises the odds of catching a policy problem before Google does; it does not promise
+        an approval.</p>
+    </div>
+    <div class="pi-foot"><button class="act" id="btnPolicyClose2">Got it</button></div>
+  </dialog>
+</main>
+
+<script type="module">
+const __rp = {};
+/* ---- engine/rules.mjs ---- */
+__rp['rules'] = (() => {
+/**
+ * The rulebook. Every constant the audit and the converter share lives here,
+ * so a rule is changed in one place and both sides agree.
+ *
+ * Two families of rules:
+ *
+ *   technical  — will the Google Ads upload/validator accept the file, and
+ *                will it actually run and register a click in the ad slot.
+ *                Sourced from the App campaign HTML5 spec.
+ *   policy     — will a policy reviewer disapprove it. Sourced from the Google
+ *                Ads policies (support.google.com/adspolicy/answer/6008942):
+ *                Prohibited content, Prohibited practices, Restricted content,
+ *                Editorial & technical.
+ *
+ * Text rules are deterministic pattern matches against the ad's visible copy.
+ * They cannot see art or judge intent — that is what the optional AI review
+ * is for — but they catch the phrases that get playables disapproved over and
+ * over: fake system UI, cash promises, urgency bait, shouting punctuation.
+ */
+
+const GOOGLE_ADS_LIMITS = {
+  // App campaign HTML5/playable assets. Display campaign limits are far tighter
+  // (600 KB / 40 files) and do not apply here.
+  // https://support.google.com/google-ads/answer/9981650
+  maxZipBytes: 5 * 1024 * 1024,
+  maxFiles: 512,
+};
+
+/**
+ * The one script Google expects a playable to load from outside the ZIP.
+ * Must be a literal <script> tag in <head>; injected via JS and Google makes
+ * the whole ad area clickable at serve time.
+ */
+const EXITAPI_SRC = 'https://tpc.googlesyndication.com/pagead/gadgets/html5/api/exitapi.js';
+
+/**
+ * Hosts a Google Ads playable may reach. Everything else is a "fourth-party
+ * call" and gets the asset disapproved. Google explicitly permits Google Fonts,
+ * Google-hosted jQuery, GSAP and CreateJS.
+ */
+const ALLOWED_HOSTS = [
+  'tpc.googlesyndication.com',
+  'googleads.g.doubleclick.net',
+  'www.googletagservices.com',
+  'fonts.googleapis.com',
+  'fonts.gstatic.com',
+  'ajax.googleapis.com',
+  'cdnjs.cloudflare.com',
+  'cdn.jsdelivr.net',
+];
+
+/** Constructs Google prohibits outright in HTML5 assets. Each is a disapproval. */
+const PROHIBITED = [
+  { id: 'iframe', re: /<\s*(iframe|frame|frameset)\b/i, label: '<iframe>/<frame>/<frameset>',
+    why: 'Frames of any kind are prohibited in Google Ads HTML5 assets.' },
+  // `fix` names the converter fixer that removes it; absent, a person has to
+  // change the creative. The Enabler fix only applies when the file merely
+  // references the script rather than calling into the API, which the audit checks.
+  { id: 'enabler', re: /Enabler\.js|studio\.doubleclick/i, label: 'Enabler.js',
+    why: 'DoubleClick Studio Enabler.js references are prohibited in Google Ads HTML5 assets.', fix: 'remove-enabler-script' },
+  { id: 'amp', re: /cdn\.ampproject\.org|<\s*amp-/i, label: 'AMP',
+    why: 'AMP tags and cdn.ampproject.org are prohibited.' },
+  { id: 'producttype', re: /<meta[^>]+name=["']?productType["']?[^>]*content=["']?dynamic/i, label: 'productType=dynamic',
+    why: '`<meta name="productType" content="dynamic">` is prohibited.', fix: 'remove-producttype' },
+];
+
+/**
+ * Ad-network SDKs a playable may have been built for. Detection is by the
+ * call surface the creative uses, which is also what has to be rewritten or
+ * shimmed for the Google build.
+ *
+ *   exit   the network's click-through call; rewritten to ExitApi.exit()
+ *   shim   whether the converter can stand in for the SDK at runtime
+ */
+const NETWORKS = [
+  { id: 'google', label: 'Google Ads', test: /\bExitApi\b|window\.super_html\s*=/, shim: false },
+  { id: 'mraid', label: 'MRAID (AppLovin, Unity, Moloco, Chartboost…)', test: /\bmraid\b/, shim: true,
+    exit: /\bmraid\s*\.\s*open\s*\(/g },
+  { id: 'dapi', label: 'ironSource / Unity LevelPlay (DAPI)', test: /\bdapi\s*\./, shim: true,
+    exit: /\bdapi\s*\.\s*openStoreUrl\s*\(/g },
+  { id: 'facebook', label: 'Meta (FbPlayableAd)', test: /\bFbPlayableAd\b/, shim: true,
+    exit: /\bFbPlayableAd\s*\.\s*onCTAClick\s*\(/g },
+  { id: 'mintegral', label: 'Mintegral', test: /\bgameReady\s*\(/, shim: false },
+  { id: 'tiktok', label: 'TikTok / Pangle', test: /\bopenAppStore\s*\(|\bplayableSDK\b/, shim: false },
+  { id: 'vungle', label: 'Vungle / Liftoff', test: /postMessage\s*\(\s*["']download["']/, shim: false },
+];
+
+/**
+ * Exits Google forbids in App campaign HTML5 ("CUSTOM_EXIT_NOT_ALLOWED"): any
+ * navigation the creative performs itself instead of calling ExitApi.exit().
+ *
+ * Every pattern opens with `(?<![\w$.])` so it can never match the tail of a
+ * longer member expression. Without it `e.location = 5` matched at `location`
+ * and became `e.ExitApi.exit()`, and `var x=1,location=null` became
+ * `var x=1,ExitApi.exit()` — a syntax error that killed the whole script.
+ * A bare `location = …` is deliberately NOT matched: in minified code that is
+ * far more often a local variable than a navigation.
+ *
+ *   kind 'call'   the match ends at `(`; the balanced call is replaced.
+ *   kind 'assign' the match ends at `=`; only the assignment TARGET is
+ *                 replaced, so the right-hand side is never consumed.
+ */
+const CUSTOM_EXITS = [
+  { id: 'window-open', label: 'window.open()', kind: 'call',
+    re: /(?<![\w$.])(?:window|top|parent|self)\s*\.\s*open\s*\(/g },
+  { id: 'location-call', label: 'location.assign() / location.replace()', kind: 'call',
+    re: /(?<![\w$.])(?:(?:window|top|parent|self|document)\s*\.\s*)?location\s*\.\s*(?:assign|replace)\s*\(/g },
+  { id: 'location-set', label: 'location.href = …', kind: 'assign',
+    re: /(?<![\w$.])(?:(?:window|top|parent|self|document)\s*\.\s*location(?:\s*\.\s*href)?|location\s*\.\s*href)\s*=(?!=)/g },
+];
+
+/**
+ * Navigation through a reference the converter cannot identify, such as
+ * `frame.location.href = url`. Reported so a human can look, never rewritten:
+ * the object may not be a window at all.
+ */
+const SUSPECT_NAV = /(?<=[\w$])\s*\.\s*location\s*(?:\.\s*href\s*)?=(?!=)|(?<=[\w$])\s*\.\s*open\s*\(\s*["']https?:/g;
+
+/**
+ * Browser storage is prohibited in HTML5 ad assets. The converter rewrites the
+ * identifiers to an in-memory stand-in, so after conversion nothing matches.
+ */
+const STORAGE_RE = /\b(localStorage|sessionStorage|indexedDB)\b/g;
+
+/**
+ * Native dialogs mimic system UI (Misleading ad design) and are disruptive.
+ *
+ * Detection only. These are NEVER rewritten in the source: `function confirm(m)`
+ * and the shorthand method in `{prompt(t){…}}` both look exactly like calls, and
+ * rewriting them produced `function rpDialog.confirm(m)` — a syntax error. The
+ * converter overrides the globals from the shim instead, which needs no source
+ * edit and catches every call form, aliased ones included.
+ */
+const DIALOG_RE = /(?<![\w$.])(?:window\s*\.\s*)?(alert|confirm|prompt)\s*\(/g;
+
+/** Media that starts by itself. Google: no sound before the user interacts. */
+/**
+ * A creative that actually CALLS the DoubleClick Studio Enabler, as opposed to
+ * one that merely loads Enabler.js and never uses it. The negative lookahead
+ * for `js` is the whole point: without it the script's own filename matched,
+ * so a file that only referenced the script looked like one that depended on
+ * it and the tag was never removed.
+ */
+const ENABLER_CALL_RE = /\bEnabler\s*\.\s*(?!js\b)[A-Za-z_$]/;
+
+const AUTOPLAY_RE = /<(audio|video)\b[^>]*\bautoplay\b/i;
+
+/** Google's filename rule: letters, numbers, dot, dash, underscore, slash. */
+const SAFE_NAME_RE = /^[A-Za-z0-9._\-\/]+$/;
+
+/* ------------------------------------------------------------------ *
+ * Where each check comes from
+ * ------------------------------------------------------------------ */
+
+/**
+ * The basis for every check the tool makes, keyed by finding id.
+ *
+ * This exists so the answer to "says who?" is in the codebase rather than in
+ * someone's memory. docs/validation-sources.md is generated from it, and a test
+ * asserts every finding the audit can produce has an entry here, so a new rule
+ * cannot be added without declaring what it rests on.
+ *
+ * basis:
+ *   captured   the source text is in this repo and the rule quotes it, so a
+ *              reader can verify the wording themselves
+ *   documented a public Google page states it; cited by URL, text not captured
+ *   vendor     another ad network's SDK specification, not Google's
+ *   measured   established by running real playables, not from documentation
+ */
+const SOURCE_REFS = {
+  policies:  { family: 'google',  short: 'Ads policies',   label: 'Google Ads policies', url: 'https://support.google.com/adspolicy/answer/6008942', captured: 'docs/google-ads-policies.md' },
+  html5spec: { family: 'google',  short: 'HTML5 spec',     label: 'About HTML5/Playable ads for App campaigns', url: 'https://support.google.com/google-ads/answer/9981650' },
+  html5fix:  { family: 'google',  short: 'HTML5 issues',   label: 'Fix issues with HTML5 assets for App campaigns', url: 'https://support.google.com/google-ads/answer/12771973' },
+  mraid:     { family: 'network', short: 'MRAID',          label: 'IAB MRAID specification', url: 'https://www.iab.com/guidelines/mobile-rich-media-ad-interface-definitions-mraid/' },
+  dapi:      { family: 'network', short: 'DAPI',           label: 'ironSource / Unity LevelPlay playable (DAPI)', url: 'https://developers.is.com/ironsource-mobile/general/playable-ads/' },
+  meta:      { family: 'network', short: 'Meta',           label: 'Meta playable ads specification', url: 'https://developers.facebook.com/docs/app-ads/formats/playable-ads' },
+  mintegral: { family: 'network', short: 'Mintegral',      label: 'Mintegral playable specification', url: 'https://www.mintegral.com/en/advertiser/playable' },
+  tiktok:    { family: 'network', short: 'TikTok/Pangle',  label: 'TikTok / Pangle playable specification', url: 'https://ads.tiktok.com/help/article/playable-ads' },
+  vungle:    { family: 'network', short: 'Vungle',         label: 'Vungle / Liftoff playable specification', url: 'https://support.vungle.com/hc/en-us/articles/360048622551' },
+  web:       { family: 'web',     short: 'Web standards',  label: 'Browser behaviour (HTML and JavaScript standards)', url: 'https://developer.mozilla.org/' },
+};
+
+/** The three kinds of source, in the order a reader wants them. */
+const SOURCE_FAMILIES = [
+  { id: 'google', label: "Google's own documentation", why: 'What Google requires of an App campaign HTML5 asset, and what its policies forbid.' },
+  { id: 'network', label: "Other ad networks' playable specifications", why: 'What the file was built against. These say what has to be replaced, not what Google wants.' },
+  { id: 'web', label: 'Web standards', why: 'How a browser behaves when the document is incomplete. Not an ad rule — a rendering one.' },
+];
+
+const CHECK_SOURCES = {
+  /* ---- packaging ---- */
+  'zip-size':        { basis: 'documented', ref: 'html5spec', states: 'App campaign playables upload as a .ZIP of at most 5 MB.' },
+  'zip-headroom':    { basis: 'documented', ref: 'html5spec', states: 'Same 5 MB cap; this warns before an edit crosses it.' },
+  'zip-files':       { basis: 'documented', ref: 'html5spec', states: 'No more than 512 files inside the .ZIP.' },
+  'filenames':       { basis: 'documented', ref: 'html5fix', states: 'File and folder names may use only letters, numbers, dot, dash and underscore.' },
+  'entry-not-root':  { basis: 'documented', ref: 'html5spec', states: 'Google looks for the entry HTML at the root of the archive.' },
+
+  /* ---- document integrity ---- */
+  'doctype':         { basis: 'documented', ref: 'web', states: 'Without a doctype the browser uses quirks mode, changing the layout maths a game relies on.' },
+  'charset':         { basis: 'documented', ref: 'web', states: 'Undeclared encoding renders non-ASCII copy as mojibake.' },
+  'viewport':        { basis: 'documented', ref: 'web', states: 'Without a viewport a mobile browser assumes desktop width and scales the ad down.' },
+  'ad-orientation':  { basis: 'documented', ref: 'html5spec', states: 'Orientation is declared with `<meta name="ad.orientation">`; absent, the asset renders portrait-only with no error.' },
+  'ad-orientation-bad': { basis: 'documented', ref: 'html5spec', states: 'An unparseable value falls back to portrait-only, silently.' },
+  'truncated':       { basis: 'documented', ref: 'web', states: 'A document with no closing `</html>` is incomplete and will not run.' },
+  'script-syntax':   { basis: 'captured', ref: 'policies', states: 'Technical requirements name "HTML5 ads that don\u2019t function properly or appear blank".' },
+
+  /* ---- the exit ---- */
+  'no-google-exit':  { basis: 'documented', ref: 'html5spec', states: 'The click-through is registered by calling ExitApi.exit(); nothing else counts.' },
+  'exitapi-script':  { basis: 'documented', ref: 'html5spec', states: 'exitapi.js loads from tpc.googlesyndication.com as a literal `<script>` in `<head>`.' },
+  'exitapi-placement': { basis: 'documented', ref: 'html5fix', states: 'Injected by other JavaScript instead of a literal tag, the whole ad area becomes clickable at serve time.' },
+  'exitapi-dynamic': { basis: 'documented', ref: 'html5fix', states: 'Same consequence: the entire ad becomes the click target.' },
+  'custom-exit':     { basis: 'documented', ref: 'html5fix', states: 'Custom exits are not allowed in App campaign HTML5 (CUSTOM_EXIT_NOT_ALLOWED).' },
+  'custom-exit-fallback': { basis: 'documented', ref: 'html5fix', states: 'Same rule; downgraded because a Google exit is already present, so the branch is likely unreachable.' },
+  'custom-exit-link':{ basis: 'documented', ref: 'html5fix', states: 'An outbound link is a custom exit and loses the click.' },
+  'suspect-nav':     { basis: 'documented', ref: 'html5fix', states: 'Same rule, through a reference the tool cannot identify, so it is reported rather than rewritten.' },
+
+  /* ---- other networks' SDKs ---- */
+  'sdk-script':      { basis: 'vendor', ref: ['mraid', 'dapi', 'meta'], states: 'The host injects mraid.js at serve time; on Google it does not exist and the request fails.' },
+  'sdk-calls':       { basis: 'vendor', ref: ['mraid', 'dapi', 'meta'], states: 'A creative waits for the SDK\u2019s ready signal before starting, so with no SDK it never boots.' },
+  'sdk-also':        { basis: 'vendor', ref: ['mraid', 'dapi', 'meta'], states: 'Same, softened because the file already carries a Google exit.' },
+  'sdk-unsupported': { basis: 'vendor', ref: 'mintegral', states: 'A network whose call surface the tool has no stand-in for. Reported for a person to check in the preview rather than rewritten.' },
+  'sdk-also-network': { basis: 'vendor', ref: 'mintegral', states: 'Same, downgraded to advice: the file already calls ExitApi.exit(), so its Google path should win and this branch never run.' },
+  'missing-local-ref': { basis: 'documented', ref: 'html5spec', states: 'A playable must be self-contained; paths not in the package fail in the ad slot.' },
+  'external-refs':   { basis: 'documented', ref: 'html5fix', states: 'Fetching from outside the package is a fourth-party call and is disapproved.' },
+
+  /* ---- prohibited constructs ---- */
+  'prohibited-storage':   { basis: 'documented', ref: 'html5fix', states: 'Browser storage is prohibited in HTML5 ad assets.' },
+  'prohibited-iframe':    { basis: 'documented', ref: 'html5fix', states: 'Frames of any kind are prohibited.' },
+  'prohibited-enabler':   { basis: 'documented', ref: 'html5fix', states: 'DoubleClick Studio Enabler.js is prohibited.' },
+  'prohibited-amp':       { basis: 'documented', ref: 'html5fix', states: 'AMP tags and cdn.ampproject.org are prohibited.' },
+  'prohibited-producttype': { basis: 'documented', ref: 'html5fix', states: '`<meta name="productType" content="dynamic">` is prohibited.' },
+  'prohibited-video-nosrc': { basis: 'documented', ref: 'html5fix', states: 'A `<video>` with no src attribute is disallowed.' },
+
+  /* ---- behaviour a reviewer sees ---- */
+  'dialogs':         { basis: 'captured', ref: 'policies', states: 'Misrepresentation covers ads that deceive users; system-style dialogs read as imitating device UI. The detail page is not captured.' },
+  'autoplay-media':  { basis: 'documented', ref: 'html5spec', states: 'Sound must not be enabled before the user interacts with the ad.' },
+  'audio-ungated':   { basis: 'documented', ref: 'html5spec', states: 'Same rule, plus: all sound stops on the exit click.' },
+  'data-collection': { basis: 'captured', ref: 'policies', states: 'Data collection and use: advertising partners should not collect user information for unclear purposes or without disclosure.' },
+  'close-control':   { basis: 'captured', ref: 'policies', states: 'Misrepresentation. Non-functional controls are named on the Misleading ad design detail page, which is not captured.' },
+  'copy-in-images':  { basis: 'measured', ref: 'policies', states: 'Says the copy checks below could not read this creative — every word is drawn into artwork — so their silence proves nothing and only the AI scan can see it.' },
+  'no-cta-copy':     { basis: 'captured', ref: 'policies', states: 'Editorial: ads must be clear and easy to interact with.' },
+};
+
+/* ------------------------------------------------------------------ *
+ * Policy text rules
+ * ------------------------------------------------------------------ */
+
+/**
+ * Deterministic copy checks. `re` runs against each extracted text string
+ * (markup text and UI-looking string literals), never against raw code, so a
+ * variable called `casino` does not trip a gambling flag but a button that
+ * says "WIN REAL CASH" does.
+ *
+ * Severity is consequence, not confidence:
+ *   blocker  a reviewer will disapprove this
+ *   warn     frequently disapproved; needs a human decision
+ *   advice   a known irritant; fix if it is cheap
+ */
+/**
+ * `source` carries the sentence from docs/google-ads-policies.md that backs the
+ * rule, or null when the captured page does not state it. The captured page is
+ * Google's overview; several real sub-policies (Misleading ad design, Clickbait)
+ * live on detail pages that were not captured, so rules resting on those are
+ * marked null and shown as unsourced rather than presented as Google's words.
+ */
+const POLICY_TEXT_RULES = [
+  {
+    id: 'fake-system-ui', area: 'Misrepresentation · Misleading ad design', severity: 'warn',
+    source: null,
+    label: 'Copy that imitates system UI or notifications',
+    why: 'Ads may not mimic system warnings, dialogs, notifications, or device UI. "Update available", "Your phone…", "Virus detected" style copy is a standard disapproval.',
+    re: /\b(update (?:available|required)|your (?:phone|device|battery|storage)|virus|malware|battery (?:low|is)|storage (?:full|almost)|system (?:alert|warning|update|error)|security (?:alert|warning)|new message|missed call|download complete|(?:1|one) new notification|allow notifications?|accept cookies?)\b/i,
+  },
+  {
+    id: 'urgency-bait', area: 'Misrepresentation · Clickbait', severity: 'warn',
+    source: null,
+    label: 'Manufactured urgency',
+    why: 'Copy that pressures the user with false scarcity or deadlines is treated as clickbait.',
+    re: /\b(limited time|hurry|last chance|only today|today only|offer ends|ends (?:soon|tonight|today)|act now|don'?t miss|before it'?s gone|expires? (?:soon|today))\b/i,
+  },
+  {
+    id: 'cash-promise', area: 'Misrepresentation / Gambling & games', severity: 'warn',
+    source: "making misleading or unrealistic claims regarding weight loss or financial gain",
+    label: 'Promises money or cash rewards',
+    why: 'Real-money language needs a gambling certification and a matching app; for a casual game it is misrepresentation. This is the single most common playable disapproval for "cash" games.',
+    re: /\b(real (?:money|cash|prizes?)|cash (?:prizes?|rewards?|out|app)|win (?:money|cash|\$)|earn (?:money|cash|real)|get paid|withdraw(?:al)?|payout|paypal|gift ?cards?|free money|make money|\$\s?\d{2,})\b/i,
+  },
+  {
+    id: 'gambling-terms', area: 'Restricted content · Gambling & games', severity: 'advice',
+    source: "Gambling-related ads are allowed if they comply with the policies below and the advertiser has received the proper Google Ads certification.",
+    label: 'Gambling vocabulary',
+    why: 'Casino terms are fine for a certified gambling advertiser and a problem for everyone else. Confirm the account holds the certification the vocabulary implies.',
+    re: /\b(casino|slots?\s?machine|jackpot|roulette|blackjack|poker|betting|place your bets?|sportsbook|lottery)\b/i,
+  },
+  {
+    id: 'superlative-claims', area: 'Misrepresentation · Misleading representation', severity: 'advice',
+    source: "making offers that aren't actually available",
+    label: 'Unverifiable superlatives',
+    why: 'Claims like "#1", "best", "guaranteed" need substantiation. Reviewers read them as misleading when the store listing cannot back them.',
+    re: /(?:^|\s)(#\s?1|no\.?\s?1|number one|the best (?:game|app)|best (?:game|app) (?:ever|of)|guaranteed|100\s?% (?:free|safe|win)|risk[- ]free|doctors? recommend)/i,
+  },
+  {
+    id: 'shouting-punctuation', area: 'Editorial · Punctuation & symbols', severity: 'warn',
+    source: "gimmicky use of words, numbers, letters, punctuation, or symbols such as FREE, f-r-e-e, and F₹€€!!",
+    label: 'Repeated punctuation or symbols as emphasis',
+    why: 'Google\'s editorial policy rejects repeated punctuation (!!!, ???), symbols used for emphasis ($$$, ★★★) and letters replaced by symbols.',
+    re: /(!{2,}|\?{2,}|\${2,}|[★☆✨🔥]{2,}|\b[A-Z](?:[.\-\s][A-Z]){3,}\b)/,
+  },
+  {
+    id: 'gimmick-copy', area: 'Editorial · Style requirements', severity: 'advice',
+    source: "overly generic ads that contain vague phrases such as \"Buy products here\"",
+    label: 'Gimmicky call-to-action copy',
+    why: '"Click here", "FREE!!!", "Download now!!!" style copy is called out as gimmicky in the editorial policy.',
+    re: /\b(click here|tap here|free!+|download now!+|install now!+)/i,
+  },
+  {
+    id: 'adult-terms', area: 'Restricted content · Adult content', severity: 'warn',
+    source: "Google Ads restricts certain kinds of sexual content in ads and destinations, which will only show in limited scenarios based on user search queries, user age and local laws where the ad is being served.",
+    label: 'Adult or sexual vocabulary',
+    why: 'Sexual content is restricted and disallowed entirely for app installs targeting a general audience.',
+    re: /\b(sexy|nude|naked|xxx|porn|erotic|hentai|18\s?\+|strip(?:ping|tease)|hot (?:girls?|wives?|singles?)|dating)\b/i,
+  },
+  {
+    id: 'restricted-vertical', area: 'Restricted content', severity: 'warn',
+    source: "The policies below cover content that is sometimes legally or culturally sensitive.",
+    label: 'Restricted-vertical vocabulary',
+    why: 'Alcohol, tobacco/vaping, cannabis, weight loss, crypto/forex, loans and pharmaceuticals are restricted categories with eligibility requirements. Confirm the account is certified before shipping this copy.',
+    re: /\b(beer|vodka|whisk(?:e)?y|wine|alcohol|cigarettes?|vap(?:e|ing)|e-?cig|cbd|cannabis|marijuana|weed|weight loss|lose weight|diet pills?|fat burn(?:er|ing)|bitcoin|crypto|nft|forex|binary options?|payday loan|personal loans?|viagra|prescription|pharmacy)\b/i,
+  },
+  {
+    id: 'store-badge-copy', area: 'Trademarks · Store badges', severity: 'advice',
+    source: null,
+    label: 'Mentions a store by name',
+    why: 'Store names and badges are fine only as the official, unmodified assets. Hand-drawn "Google Play" or "App Store" buttons get flagged.',
+    re: /\b(google play|play store|app store|apple store)\b/i,
+  },
+];
+
+/** CTA copy we recognise; absence is only advice, because the CTA is often art. */
+const CTA_RE = /\b(install(?: now| free| today)?|download(?: now| free| today)?|play (?:now|free|for free|today|here)|get (?:it|the app|the game|started|now|free|it now)|try (?:it|now|free|for free|today)|start (?:now|free|for free|today|here|learning|playing|trial)|join (?:now|free|for free|today|us)|open (?:app|now)|continue|sign up|claim (?:now|free|reward)|free trial)\b/i;
+
+/** Marker ids the converter stamps into the document so the audit can see what has been done. */
+const MARKERS = {
+  shim: 'rp-google-shim',
+  audioGate: 'rp-audio-gate',
+};
+
+/**
+ * The basis behind one finding, by id — the answer to "says who?".
+ *
+ * Most ids are in CHECK_SOURCES directly. Three families are named after the
+ * thing they found, so `sdk-unsupported-mintegral` rests on whatever
+ * `sdk-unsupported` rests on, and a `copy-…` finding rests on the sentence its
+ * own rule carries. Returns null for an id with no declared basis, which the
+ * test suite treats as a failure.
+ */
+function sourceFor(id) {
+  if (CHECK_SOURCES[id]) return { id, ...CHECK_SOURCES[id] };
+  if (id.startsWith('copy-')) {
+    const rule = POLICY_TEXT_RULES.find((r) => `copy-${r.id}` === id);
+    if (!rule) return null;
+    // A rule with no captured sentence is declared as such rather than
+    // presented as Google's wording — the same honesty the interface shows.
+    return { id, basis: rule.source ? 'captured' : 'unsourced', ref: 'policies', states: rule.source || rule.why };
+  }
+  const m = /^(sdk-unsupported|sdk-also)-([a-z0-9]+)$/.exec(id);
+  if (m) {
+    const base = CHECK_SOURCES[m[1] === 'sdk-also' ? 'sdk-also-network' : m[1]];
+    return { id, ...base, ref: SOURCE_REFS[m[2]] ? m[2] : base.ref };
+  }
+  return null;
+}
+
+return { sourceFor, GOOGLE_ADS_LIMITS, EXITAPI_SRC, ALLOWED_HOSTS, PROHIBITED, NETWORKS, CUSTOM_EXITS, SUSPECT_NAV, STORAGE_RE, DIALOG_RE, ENABLER_CALL_RE, AUTOPLAY_RE, SAFE_NAME_RE, SOURCE_REFS, SOURCE_FAMILIES, CHECK_SOURCES, POLICY_TEXT_RULES, CTA_RE, MARKERS };
+})();
+
+/* ---- engine/inspect.mjs ---- */
+__rp['inspect'] = (() => {
+/**
+ * Read-only inspection of a playable's HTML.
+ *
+ * Everything downstream — the audit, the converter, the AI review — keys off
+ * what is found here, so nothing in this module throws: an unknown framework
+ * still yields usable offsets and an empty inventory.
+ *
+ * Deliberately pure string work. Real files are 3-5 MB with the game usually
+ * base64'd into a JS string, so a DOM parse would be slow and would risk
+ * re-encoding a payload the loader reads back verbatim.
+ *
+ * Runs unchanged under Node (tests) and in the browser (the tool page).
+ */
+
+const { NETWORKS, CUSTOM_EXITS, ALLOWED_HOSTS, EXITAPI_SRC } = __rp['rules'];
+
+/* ------------------------------------------------------------------ *
+ * Structure
+ * ------------------------------------------------------------------ */
+
+/** Index just past the opening tag `<name ...>`, or -1. */
+function afterOpenTag(html, name) {
+  const m = new RegExp(`<${name}(?:\\s[^>]*)?>`, 'i').exec(html);
+  return m ? m.index + m[0].length : -1;
+}
+
+function offsets(html) {
+  const lower = html.toLowerCase();
+  return {
+    headOpenEnd: afterOpenTag(html, 'head'),
+    headClose: lower.indexOf('</head>'),
+    bodyOpenEnd: afterOpenTag(html, 'body'),
+    bodyClose: lower.lastIndexOf('</body>'),
+    htmlOpenEnd: afterOpenTag(html, 'html'),
+    htmlClose: lower.lastIndexOf('</html>'),
+  };
+}
+
+/** Networks whose SDK surface appears in the document, most specific first. */
+function detectNetworks(html) {
+  return NETWORKS.filter((n) => n.test.test(html)).map(({ id, label, shim }) => ({ id, label, shim }));
+}
+
+/** Custom navigations Google forbids, with a short excerpt of each for the report. */
+function customExits(html) {
+  const out = [];
+  for (const rule of CUSTOM_EXITS) {
+    rule.re.lastIndex = 0;
+    let m;
+    while ((m = rule.re.exec(html))) {
+      out.push({ id: rule.id, label: rule.label, at: m.index, excerpt: html.slice(m.index, m.index + 60).replace(/\s+/g, ' ') });
+      if (out.length > 50) break;
+    }
+  }
+  return out;
+}
+
+/** Network click-through calls the converter knows how to rewrite. */
+function networkExits(html) {
+  const out = [];
+  for (const n of NETWORKS) {
+    if (!n.exit) continue;
+    n.exit.lastIndex = 0;
+    let m;
+    while ((m = n.exit.exec(html))) out.push({ network: n.id, at: m.index, excerpt: html.slice(m.index, m.index + 50).replace(/\s+/g, ' ') });
+  }
+  return out;
+}
+
+/**
+ * The document with script and style BODIES removed (tags kept). Element
+ * checks run on this so that minified JS like `i<input.length` cannot pass
+ * for an <input> tag.
+ */
+function markupOnly(html) {
+  return html.replace(/(<script\b[^>]*>)[\s\S]*?(<\/script>)/gi, '$1$2')
+    .replace(/(<style\b[^>]*>)[\s\S]*?(<\/style>)/gi, '$1$2')
+    .replace(/<!--[\s\S]*?-->/g, '');
+}
+
+/**
+ * Resources referenced by relative path. In a single-file playable every one
+ * of these is a broken reference — the file was exported for a network that
+ * injects its SDK (mraid.js) at serve time, or assets were never inlined.
+ */
+function localRefs(html) {
+  const out = [];
+  const re = /<(script|link|img|audio|video|source)\b[^>]*\b(?:src|href)\s*=\s*["']([^"']+)["']/gi;
+  let m;
+  html = markupOnly(html);
+  while ((m = re.exec(html))) {
+    const ref = m[2].trim();
+    if (/^(https?:)?\/\//i.test(ref) || /^(data|blob|javascript|about|mailto|tel):/i.test(ref) || ref.startsWith('#')) continue;
+    out.push({ tag: m[1].toLowerCase(), ref });
+  }
+  return out;
+}
+
+/**
+ * Hosts the creative LOADS from at runtime that are not on Google's allow-list.
+ * Resource tags only — an <a href> is a navigation, reported as a custom exit.
+ */
+function externalHosts(html) {
+  const hosts = new Set();
+  for (const m of markupOnly(html).matchAll(/<(?:script|link|img|audio|video|source|iframe|embed|object)\b[^>]*\b(?:src|href|data)\s*=\s*["'](https?:\/\/[^"']+)["']/gi)) {
+    try {
+      const host = new URL(m[1]).hostname;
+      if (!ALLOWED_HOSTS.includes(host)) hosts.add(host);
+    } catch { /* malformed URL — reported elsewhere if it matters */ }
+  }
+  return [...hosts];
+}
+
+/** The literal <script src=…exitapi.js> tag, and whether it sits in <head>. */
+function exitApiScript(html) {
+  const m = /<script[^>]+src\s*=\s*["']([^"']*exitapi\.js[^"']*)["'][^>]*>\s*<\/script>/i.exec(html);
+  if (!m) return { present: false, inHead: false, official: false, at: -1 };
+  const { headClose } = offsets(html);
+  return {
+    present: true,
+    at: m.index,
+    inHead: headClose > -1 ? m.index < headClose : m.index < (html.toLowerCase().indexOf('<body') >>> 0),
+    official: m[1] === EXITAPI_SRC,
+  };
+}
+
+/**
+ * One call, everything the audit and converter need to know about structure.
+ */
+function inspect(html) {
+  const networks = detectNetworks(html);
+  const hasGoogleExit = /\bExitApi\s*\.\s*exit\s*\(/.test(html);
+  return {
+    bytes: html.length,
+    hasDoctype: /^\s*<!doctype html/i.test(html.slice(0, 200)),
+    terminated: html.toLowerCase().includes('</html>', Math.max(0, html.length - 500)),
+    offsets: offsets(html),
+    networks,
+    primary: networks.find((n) => n.id !== 'google') || networks[0] || null,
+    exits: {
+      google: hasGoogleExit,
+      superHtml: /window\.super_html\s*=/.test(html),
+      network: networkExits(html),
+      custom: customExits(html),
+    },
+    exitApiScript: exitApiScript(html),
+    localRefs: localRefs(html),
+    externalHosts: externalHosts(html),
+    hasAudio: /<audio\b|new\s+Audio\s*\(|AudioContext\b|\.play\s*\(/.test(html),
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Copy extraction
+ * ------------------------------------------------------------------ */
+
+const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" };
+const decode = (s) => s.replace(/&(#?\w+);/g, (m, k) => ENTITIES[k] ?? (k[0] === '#' ? String.fromCharCode(parseInt(k.slice(1), 10)) || m : m));
+
+/** Does a string literal read like something a user could see? */
+function looksLikeCopy(s) {
+  if (s.length < 2 || s.length > 160) return false;
+  if (/data:|base64|https?:\/\/|\\u[0-9a-f]{4}|[{}<>;=]|\.(?:png|jpe?g|webp|gif|mp3|ogg|wav|json|js|css|ttf|woff2?|atlas|plist|bin)\b/i.test(s)) return false;
+  const letters = (s.match(/[A-Za-zÀ-ỹ]/g) || []).length;
+  if (letters < 2 || letters / s.length < 0.5) return false;
+  if (/\s/.test(s.trim())) return true;                     // multi-word: copy
+  // single token: accept Capitalised or ALLCAPS words (Install, PLAY), reject
+  // identifiers (touchstart, gameOver, my_var, foo.bar)
+  return /^[A-ZÀ-Ỹ][a-zà-ỹ]{2,}$|^[A-ZÀ-Ỹ]{3,}!?$/.test(s.trim());
+}
+
+/**
+ * Visible copy: markup text and attribute labels, plus string literals in
+ * inline scripts that look like UI text. Each entry carries where it came
+ * from so a finding can say "in a script string" vs "in the page".
+ */
+function extractText(html, { max = 600 } = {}) {
+  const seen = new Set();
+  const out = [];
+  const push = (text, where) => {
+    const t = decode(text).replace(/\s+/g, ' ').trim();
+    if (!t) return;
+    const k = t.toLowerCase();
+    if (seen.has(k) || out.length >= max) return;
+    seen.add(k);
+    out.push({ text: t, where });
+  };
+
+  // Markup: strip code and style, then read text nodes and labelling attributes.
+  const markup = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ');
+  for (const m of markup.matchAll(/\b(?:alt|title|aria-label|placeholder|value)\s*=\s*["']([^"']{2,160})["']/gi)) push(m[1], 'markup');
+  for (const m of markup.matchAll(/>([^<>]{2,400})</g)) {
+    const t = m[1].trim();
+    if (t && /[A-Za-zÀ-ỹ]{2}/.test(t)) push(t, 'markup');
+  }
+
+  // Inline scripts: string literals that read like copy.
+  for (const s of html.matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)) {
+    const body = s[1];
+    // Skip the pathological literal — a base64'd game bundle — before the
+    // literal regex has to walk it.
+    if (body.length > 2_000_000 && !/[\n;]/.test(body.slice(0, 5000))) continue;
+    for (const m of body.matchAll(/(["'`])((?:\\.|(?!\1)[^\\\n])*?)\1/g)) {
+      const lit = m[2];
+      if (lit.length > 160) continue;
+      if (looksLikeCopy(lit)) push(lit, 'script');
+      if (out.length >= max) break;
+    }
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ *
+ * Art inventory (for the optional AI review's contact sheet)
+ * ------------------------------------------------------------------ */
+
+const DATA_IMG_RE = /data:image\/(png|jpe?g|webp|gif);base64,([A-Za-z0-9+/=]{200,})/g;
+
+/**
+ * Every raster image inlined as a data: URI, largest first. Only offsets and
+ * sizes — decoding is browser work and only the AI review needs pixels.
+ */
+function inventoryImages(html, { max = 40 } = {}) {
+  const out = [];
+  let m;
+  DATA_IMG_RE.lastIndex = 0;
+  while ((m = DATA_IMG_RE.exec(html))) {
+    out.push({ mime: `image/${m[1] === 'jpg' ? 'jpeg' : m[1]}`, start: m.index, length: m[0].length, bytes: Math.floor(m[2].length * 0.75) });
+  }
+  return out.sort((a, b) => b.bytes - a.bytes).slice(0, max);
+}
+
+return { offsets, detectNetworks, customExits, networkExits, markupOnly, localRefs, externalHosts, exitApiScript, inspect, extractText, inventoryImages };
+})();
+
+/* ---- engine/convert.mjs ---- */
+__rp['convert'] = (() => {
+/**
+ * The converter: deterministic fixes that turn a playable exported for another
+ * network (mostly AppLovin / MRAID) into one Google Ads will accept and run.
+ *
+ * Every fixer is
+ *   - pure string surgery (no DOM parse — see inspect.mjs for why),
+ *   - idempotent: running it twice changes nothing the second time,
+ *   - conditional: it no-ops when the document does not need it,
+ * so `fixAll` can simply run them all, in a safe order, on every file.
+ *
+ * Runtime code the converter injects is collected in ONE <script> block in
+ * <head>, stamped `id="rp-google-shim" data-rp="<parts>"`, so the audit can
+ * see exactly what was added and the operator can find it in the output.
+ */
+
+const {
+  EXITAPI_SRC, NETWORKS, CUSTOM_EXITS, STORAGE_RE, DIALOG_RE, MARKERS, SAFE_NAME_RE, ENABLER_CALL_RE,
+} = __rp['rules'];
+const { offsets, exitApiScript } = __rp['inspect'];
+
+/* ------------------------------------------------------------------ *
+ * Head surgery helpers
+ * ------------------------------------------------------------------ */
+
+/** Guarantee a <head> exists; returns html unchanged when it already does. */
+function ensureHead(html) {
+  if (offsets(html).headOpenEnd > -1) return html;
+  const o = offsets(html);
+  if (o.htmlOpenEnd > -1) return html.slice(0, o.htmlOpenEnd) + '\n<head></head>' + html.slice(o.htmlOpenEnd);
+  const body = html.search(/<body\b/i);
+  if (body > -1) return html.slice(0, body) + '<head></head>\n' + html.slice(body);
+  const doc = /^\s*<!doctype[^>]*>/i.exec(html);
+  const at = doc ? doc[0].length : 0;
+  return html.slice(0, at) + '\n<head></head>\n' + html.slice(at);
+}
+
+/**
+ * Insert right after the run of <meta> tags that opens <head>, so metas we add
+ * stay in front and scripts we add come after them, in insertion order.
+ */
+function insertInHead(html, snippet, { afterMetas = true } = {}) {
+  html = ensureHead(html);
+  let at = offsets(html).headOpenEnd;
+  if (afterMetas) {
+    const re = /\s*<meta\b[^>]*>/gy;
+    re.lastIndex = at;
+    let m;
+    while ((m = re.exec(html))) at = m.index + m[0].length;
+  }
+  return html.slice(0, at) + '\n' + snippet + html.slice(at);
+}
+
+/* ------------------------------------------------------------------ *
+ * Balanced-call replacement
+ * ------------------------------------------------------------------ */
+
+/** Index of the `)` matching the `(` at `open`, string-literal aware; -1 if none within reach. */
+function matchParen(s, open) {
+  let depth = 0, quote = null;
+  for (let i = open; i < s.length && i - open < 4000; i++) {
+    const c = s[i];
+    if (quote) {
+      if (c === '\\') i++;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === '`') quote = c;
+    else if (c === '(') depth++;
+    else if (c === ')' && --depth === 0) return i;
+  }
+  return -1;
+}
+
+/** Replace every `head(` match plus its balanced argument list with `replacement`. */
+function replaceCalls(html, re, replacement) {
+  let out = '', last = 0, m;
+  re.lastIndex = 0;
+  while ((m = re.exec(html))) {
+    const open = m.index + m[0].length - 1;
+    const close = matchParen(html, open);
+    if (close < 0) continue;
+    out += html.slice(last, m.index) + replacement;
+    last = close + 1;
+    re.lastIndex = last;
+  }
+  return out + html.slice(last);
+}
+
+/* ------------------------------------------------------------------ *
+ * Injected runtime
+ * ------------------------------------------------------------------ */
+
+const SHIM_PARTS = {
+  // MRAID v2/v3 surface. The important part is not open() — it is that the
+  // creative's boot gate (`ready` event, getState() !== 'loading', isViewable)
+  // resolves immediately. Without this an AppLovin export sits on a black
+  // screen forever on Google and still passes every static check.
+  mraid: `
+  if (!W.mraid) {
+    var L = {}, size = function(){ return { width: W.innerWidth, height: W.innerHeight }; };
+    var soon = function(fn, a){ setTimeout(function(){ try { fn.apply(null, a || []); } catch (e) {} }, 0); };
+    W.mraid = {
+      getVersion: function(){ return '3.0'; },
+      getState: function(){ return 'default'; },
+      isViewable: function(){ return true; },
+      addEventListener: function(ev, fn){
+        (L[ev] = L[ev] || []).push(fn);
+        if (ev === 'ready') soon(fn);
+        if (ev === 'viewableChange') soon(fn, [true]);
+        if (ev === 'stateChange') soon(fn, ['default']);
+        if (ev === 'sizeChange') soon(fn, [W.innerWidth, W.innerHeight]);
+        if (ev === 'exposureChange') soon(fn, [100, size(), null]);
+      },
+      removeEventListener: function(ev, fn){ L[ev] = (L[ev] || []).filter(function(f){ return f !== fn; }); },
+      open: function(){ W.rpExit(); },
+      close: function(){}, unload: function(){}, expand: function(){}, resize: function(){},
+      useCustomClose: function(){}, setOrientationProperties: function(){},
+      setExpandProperties: function(){}, setResizeProperties: function(){},
+      playVideo: function(){}, storePicture: function(){}, createCalendarEvent: function(){},
+      getExpandProperties: function(){ var s = size(); s.useCustomClose = false; s.isModal = true; return s; },
+      getResizeProperties: function(){ return {}; },
+      getOrientationProperties: function(){ return { allowOrientationChange: true, forceOrientation: 'none' }; },
+      getCurrentAppOrientation: function(){ return { orientation: W.innerWidth > W.innerHeight ? 'landscape' : 'portrait', locked: false }; },
+      getPlacementType: function(){ return 'interstitial'; },
+      getScreenSize: size, getMaxSize: size,
+      getDefaultPosition: function(){ var s = size(); s.x = 0; s.y = 0; return s; },
+      getCurrentPosition: function(){ var s = size(); s.x = 0; s.y = 0; return s; },
+      supports: function(){ return false; },
+      getLocation: function(){ return {}; },
+      getAudioVolume: function(){ return 100; }
+    };
+  }`,
+  dapi: `
+  if (!W.dapi) {
+    var D = {}, dsize = function(){ return { width: W.innerWidth, height: W.innerHeight }; };
+    W.dapi = {
+      isReady: function(){ return true; },
+      isViewable: function(){ return true; },
+      isDemoApp: false,
+      addEventListener: function(ev, fn){
+        (D[ev] = D[ev] || []).push(fn);
+        if (ev === 'ready') setTimeout(function(){ try { fn(); } catch (e) {} }, 0);
+        if (ev === 'viewableChange') setTimeout(function(){ try { fn({ isViewable: true }); } catch (e) {} }, 0);
+        if (ev === 'adResized') setTimeout(function(){ try { fn(dsize()); } catch (e) {} }, 0);
+      },
+      removeEventListener: function(ev, fn){ D[ev] = (D[ev] || []).filter(function(f){ return f !== fn; }); },
+      openStoreUrl: function(){ W.rpExit(); },
+      getScreenSize: dsize,
+      getAudioVolume: function(){ return 100; }
+    };
+  }`,
+  facebook: `
+  if (!W.FbPlayableAd) {
+    W.FbPlayableAd = { onCTAClick: function(){ W.rpExit(); }, initializeLastClick: function(){}, gameLoaded: function(){} };
+  }`,
+  // Browser storage is prohibited; the identifiers were rewritten to these.
+  storage: `
+  var mem = function(){
+    var d = {};
+    return {
+      getItem: function(k){ return Object.prototype.hasOwnProperty.call(d, k) ? d[k] : null; },
+      setItem: function(k, v){ d[k] = String(v); },
+      removeItem: function(k){ delete d[k]; },
+      clear: function(){ d = {}; },
+      key: function(i){ return Object.keys(d)[i] || null; },
+      get length(){ return Object.keys(d).length; }
+    };
+  };
+  W.rpLocalStorage = mem(); W.rpSessionStorage = mem();
+  W.rpIndexedDB = { open: function(){ var r = {}; setTimeout(function(){ if (r.onerror) r.onerror(new Error('unavailable')); }, 0); return r; },
+                    deleteDatabase: function(){ return {}; } };`,
+  // Native dialogs mimic system UI. Overriding the globals needs no source
+  // edit, so it cannot break the creative's syntax, and it catches every call
+  // form including aliases. A creative that declares its own
+  // `function confirm(){}` overwrites these at parse time, which is correct.
+  dialog: `
+  try { W.alert = function(){}; W.confirm = function(){ return true; }; W.prompt = function(){ return null; }; } catch (e) {}`,
+  // Target of an assignment rewritten from `window.location.href = url`.
+  // Keeping the statement an assignment means the URL expression on the right
+  // is left exactly as it was, so nothing can be swallowed or mis-parsed.
+  nav: `
+  try {
+    Object.defineProperty(W, '__rpExitTo', {
+      configurable: true, get: function(){ return ''; }, set: function(){ W.rpExit(); }
+    });
+  } catch (e) {}`,
+  // No sound before the first interaction: hold play()/resume() until a touch,
+  // then release what the game asked for so its music still starts.
+  audio: `
+  (function(){
+    var armed = false, media = [], ctxs = [], evs = ['pointerdown', 'touchstart', 'mousedown', 'keydown'];
+    function arm(){
+      if (armed) return; armed = true;
+      for (var i = 0; i < evs.length; i++) W.removeEventListener(evs[i], arm, true);
+      var m = media.slice(); media = [];
+      for (var j = 0; j < m.length; j++) { try { m[j].play(); } catch (e) {} }
+      var c = ctxs.slice(); ctxs = [];
+      for (var k = 0; k < c.length; k++) { try { c[k].resume(); } catch (e) {} }
+    }
+    for (var i = 0; i < evs.length; i++) W.addEventListener(evs[i], arm, true);
+    if (W.HTMLMediaElement && !W.HTMLMediaElement.prototype.__rpGate) {
+      var play = W.HTMLMediaElement.prototype.play;
+      W.HTMLMediaElement.prototype.play = function(){
+        if (!armed) { if (media.indexOf(this) < 0) media.push(this); return Promise.resolve(); }
+        return play.apply(this, arguments);
+      };
+      W.HTMLMediaElement.prototype.__rpGate = 1;
+    }
+    if (AC && AC.prototype && !AC.prototype.__rpGate) {
+      var res = AC.prototype.resume;
+      AC.prototype.resume = function(){
+        if (!armed) { if (ctxs.indexOf(this) < 0) ctxs.push(this); return Promise.resolve(); }
+        return res.apply(this, arguments);
+      };
+      AC.prototype.__rpGate = 1;
+    }
+  })();`,
+};
+
+const SHIM_ORDER = ['nav', 'mraid', 'dapi', 'facebook', 'storage', 'dialog', 'audio'];
+const SHIM_RE = /\n?<script id="rp-google-shim"[^>]*>[\s\S]*?<\/script>/;
+
+/** The one injected block, rebuilt from its part list so it is always canonical. */
+function buildShim(parts) {
+  const list = SHIM_ORDER.filter((p) => parts.includes(p));
+  const body = list.map((p) => SHIM_PARTS[p]).join('\n');
+  return `<script id="${MARKERS.shim}" data-rp="${list.join(',')}">/* Re-Playable: Google Ads runtime shim (${list.join(', ')}) */
+(function(){
+  var W = window, ctxAll = [];
+  // Google: all sound stops on the exit click. Pause media, suspend audio contexts, then exit.
+  function stopSound(){
+    try { var els = document.querySelectorAll('audio,video'); for (var i = 0; i < els.length; i++) { try { els[i].pause(); } catch (e) {} } } catch (e) {}
+    for (var j = 0; j < ctxAll.length; j++) { try { ctxAll[j].suspend(); } catch (e) {} }
+  }
+  W.rpExit = function(){ stopSound(); try { W.ExitApi.exit(); } catch (e) {} };
+  try {
+    if (W.ExitApi && typeof W.ExitApi.exit === 'function' && !W.ExitApi.__rp) {
+      var real = W.ExitApi.exit;
+      W.ExitApi.exit = function(){ stopSound(); return real.apply(W.ExitApi, arguments); };
+      W.ExitApi.__rp = 1;
+    }
+  } catch (e) {}
+  var AC = W.AudioContext || W.webkitAudioContext;
+  if (AC && AC.prototype && !AC.prototype.__rpTrack) {
+    var resume0 = AC.prototype.resume;
+    AC.prototype.resume = function(){ if (ctxAll.indexOf(this) < 0) ctxAll.push(this); return resume0.apply(this, arguments); };
+    AC.prototype.__rpTrack = 1;
+  }
+  if (!W.gameReady) W.gameReady = function(){};
+  if (!W.gameEnd) W.gameEnd = function(){};
+  if (!W.install) W.install = function(){ W.rpExit(); };
+${body}
+})();
+<\/script>`;
+}
+
+/** Parts currently declared by the shim block, if any. */
+function shimParts(html) {
+  const m = /<script id="rp-google-shim" data-rp="([^"]*)"/.exec(html);
+  return m ? m[1].split(',').filter(Boolean) : [];
+}
+
+/** Add `part` to the shim (creating the block right after exitapi.js, or at head start). */
+function ensureShimPart(html, part) {
+  const parts = shimParts(html);
+  if (parts.includes(part)) return html;
+  parts.push(part);
+  const block = buildShim(parts);
+  if (SHIM_RE.test(html)) return html.replace(SHIM_RE, '\n' + block);
+  const tag = exitApiScript(html);
+  if (tag.present && tag.inHead) {
+    const end = html.indexOf('<\/script>', tag.at) + '<\/script>'.length;
+    return html.slice(0, end) + '\n' + block + html.slice(end);
+  }
+  return insertInHead(html, block);
+}
+
+/* ------------------------------------------------------------------ *
+ * Fixers
+ * ------------------------------------------------------------------ */
+
+const ORIENTATIONS = ['portrait', 'landscape', 'portrait,landscape'];
+
+const FIXERS = {
+  doctype(html) {
+    if (/^\s*<!doctype html/i.test(html.slice(0, 200))) return html;
+    return '<!DOCTYPE html>\n' + html.replace(/^﻿?\s*(<!doctype[^>]*>\s*)?/i, '');
+  },
+
+  charset(html) {
+    if (/<meta[^>]+charset/i.test(html.slice(0, 4000))) return html;
+    return insertInHead(html, '<meta charset="utf-8">', { afterMetas: false });
+  },
+
+  viewport(html) {
+    if (/<meta[^>]+name=["']?viewport/i.test(html)) return html;
+    return insertInHead(html, '<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">');
+  },
+
+  /**
+   * ad.orientation is the quietest failure in the spec: a missing or malformed
+   * tag is not rejected, the asset just renders portrait-only forever.
+   */
+  orientation(html, opts = {}) {
+    const want = ORIENTATIONS.includes(opts.orientation) ? opts.orientation : 'portrait';
+    const re = /<meta[^>]+name=["']?ad\.orientation["']?[^>]*>/i;
+    const m = re.exec(html);
+    if (m) {
+      const val = /content=["']?([^"'>]+)/i.exec(m[0]);
+      const ok = val && /^\s*(portrait|landscape|portrait\s*,\s*landscape|landscape\s*,\s*portrait)\s*$/i.test(val[1]);
+      if (ok && !opts.forceOrientation) return html;
+      return html.replace(re, `<meta name="ad.orientation" content="${want}">`);
+    }
+    return insertInHead(html, `<meta name="ad.orientation" content="${want}">`);
+  },
+
+  /** `<script src="mraid.js">` and friends: injected by the old host, 404 on Google. */
+  'remove-sdk-script'(html) {
+    return html.replace(/[ \t]*<script\b[^>]*\bsrc\s*=\s*["'][^"']*\b(?:mraid|dapi)\.js["'][^>]*>\s*<\/script>[ \t]*\n?/gi, '');
+  },
+
+  'remove-enabler-script'(html) {
+    // Only when Enabler is merely loaded, never called — otherwise the creative needs it and a human must decide.
+    if (ENABLER_CALL_RE.test(html)) return html;
+    return html.replace(/[ \t]*<script\b[^>]*\bsrc\s*=\s*["'][^"']*(?:Enabler\.js|studio\.doubleclick)[^"']*["'][^>]*>\s*<\/script>[ \t]*\n?/gi, '');
+  },
+
+  'remove-producttype'(html) {
+    return html.replace(/[ \t]*<meta[^>]+name=["']?productType["']?[^>]*>[ \t]*\n?/gi, '');
+  },
+
+  /**
+   * Every click-through the creative knows becomes ExitApi.exit(): the old
+   * network's CTA call, custom navigations Google forbids, and outbound links.
+   */
+  'exit-rewrite'(html) {
+    for (const n of NETWORKS) if (n.exit) html = replaceCalls(html, n.exit, 'ExitApi.exit()');
+    let usedNav = false;
+    for (const c of CUSTOM_EXITS) {
+      if (c.kind === 'call') { html = replaceCalls(html, c.re, 'ExitApi.exit()'); continue; }
+      // Assignment: swap only the target, never the right-hand side.
+      const next = html.replace(c.re, 'window.__rpExitTo =');
+      if (next !== html) usedNav = true;
+      html = next;
+    }
+    html = html.replace(/<a\b([^>]*?)\bhref\s*=\s*["']https?:\/\/[^"']*["']([^>]*)>/gi,
+      (m, a, b) => `<a${a}href="#" onclick="ExitApi.exit();return false"${b.replace(/\s*\btarget\s*=\s*["'][^"']*["']/i, '')}>`);
+    return usedNav ? ensureShimPart(html, 'nav') : html;
+  },
+
+  /** The official exitapi.js, as a literal tag in <head>, exactly once. */
+  'exitapi-script'(html) {
+    const tag = exitApiScript(html);
+    if (tag.present && tag.inHead && tag.official) return html;
+    html = html.replace(/[ \t]*<script[^>]+src\s*=\s*["'][^"']*exitapi\.js[^"']*["'][^>]*>\s*<\/script>[ \t]*\n?/gi, '');
+    return insertInHead(html, `<script src="${EXITAPI_SRC}"><\/script>`);
+  },
+
+  /**
+   * Stand in for whichever network SDK the creative still talks to.
+   *
+   * Skipped entirely for a file that already shipped its own Google build.
+   * Universal SDKs bundle every network and branch at runtime, so defining
+   * window.mraid there can steer the creative INTO a branch it would otherwise
+   * have skipped. Nothing to gain: its Google path already works.
+   */
+  'sdk-shim'(html, opts = {}) {
+    if (opts.nativeGoogleExit) return html;
+    const code = stripShim(html);
+    if (/\bmraid\b/.test(code)) html = ensureShimPart(html, 'mraid');
+    if (/\bdapi\s*\./.test(code)) html = ensureShimPart(html, 'dapi');
+    if (/\bFbPlayableAd\b/.test(code)) html = ensureShimPart(html, 'facebook');
+    return html;
+  },
+
+  'storage-shim'(html) {
+    if (!STORAGE_RE.test(stripShim(html))) return html;
+    STORAGE_RE.lastIndex = 0;
+    html = html.replace(STORAGE_RE, (m) => ({ localStorage: 'rpLocalStorage', sessionStorage: 'rpSessionStorage', indexedDB: 'rpIndexedDB' })[m]);
+    return ensureShimPart(html, 'storage');
+  },
+
+  /** Source is never touched here; the shim overrides the globals instead. */
+  'dialog-shim'(html) {
+    DIALOG_RE.lastIndex = 0;
+    if (!DIALOG_RE.test(stripShim(html))) return html;
+    return ensureShimPart(html, 'dialog');
+  },
+
+  'strip-autoplay'(html) {
+    return html.replace(/<(audio|video)\b([^>]*)>/gi, (m, t, attrs) => {
+      const cleaned = attrs.replace(/\s+autoplay(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?/gi, '');
+      return cleaned === attrs ? m : `<${t}${cleaned}>`;
+    });
+  },
+
+  'audio-gate'(html) {
+    const code = stripShim(html);
+    if (!/<audio\b|<video\b|new\s+Audio\s*\(|AudioContext\b|\.play\s*\(/.test(code)) return html;
+    return ensureShimPart(html, 'audio');
+  },
+};
+
+/** Safe order: structure → removals → rewrites → the literal exit script → shims. */
+const FIX_ORDER = [
+  'doctype', 'charset', 'viewport', 'orientation',
+  'remove-producttype', 'remove-enabler-script', 'remove-sdk-script',
+  'exit-rewrite', 'exitapi-script',
+  'sdk-shim', 'storage-shim', 'dialog-shim', 'strip-autoplay', 'audio-gate',
+];
+
+/** The creative's own code: the document minus anything the converter injected. */
+function stripShim(html) {
+  return html.replace(SHIM_RE, '');
+}
+
+/* ------------------------------------------------------------------ *
+ * Output verification
+ *
+ * The rewriters edit code as text, so a pattern that is even slightly too
+ * broad can produce JavaScript that no longer parses. A syntax error takes the
+ * whole script block with it and the ad renders blank, which no other check
+ * here would notice. So every fixer that touches the creative's own code is
+ * verified, and reverted if it breaks a script that parsed a moment ago.
+ * ------------------------------------------------------------------ */
+
+const SCRIPT_RE = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+
+/** Inline scripts a browser will execute as classic JavaScript. */
+function inlineScripts(html) {
+  const out = [];
+  let m;
+  SCRIPT_RE.lastIndex = 0;
+  while ((m = SCRIPT_RE.exec(html))) {
+    if (/\bsrc\s*=/i.test(m[1])) continue;                       // external
+    const type = /\btype\s*=\s*["']?([^"'\s>]+)/i.exec(m[1]);
+    // Anything but classic JS is data or a template: JSON-LD, x-tmpl, modules.
+    if (type && !/^(?:text|application)\/(?:java|ecma)script$/i.test(type[1])) continue;
+    out.push(m[2]);
+  }
+  return out;
+}
+
+/**
+ * Parse without executing. Returns a message when the code is not valid
+ * JavaScript, or null when it is.
+ *
+ * Only a SyntaxError counts. A Content-Security-Policy that forbids eval makes
+ * the constructor itself throw an EvalError, which says nothing about the code
+ * — reported as "parses" so a locked-down host never invents failures.
+ */
+function parseError(code) {
+  if (!code.trim()) return null;
+  try { new Function(code); return null; }
+  catch (e) { return e instanceof SyntaxError ? e.message : null; }
+}
+
+/** Whether this environment permits parse checking at all. */
+function canParse() {
+  try { return new Function('') instanceof Function; } catch { return false; }
+}
+
+/** Fixers that edit the creative's own JavaScript, and so must be verified. */
+const CODE_FIXERS = new Set(['exit-rewrite', 'storage-shim']);
+
+/**
+ * Run the named fixers.
+ * @returns {{ html, applied, reverted, verified }}
+ *   reverted  fixers whose output failed to parse and were dropped
+ *   verified  false when the host forbids parse checking, so nothing was checked
+ */
+function applyFixes(html, ids, opts = {}) {
+  const applied = [], reverted = [];
+  const verified = opts.verify === false ? false : canParse();
+  // Scripts that were already broken on arrival are not the converter's doing.
+  const baseline = verified ? inlineScripts(stripShim(html)).map((c) => parseError(c) !== null) : null;
+
+  for (const id of ids) {
+    const fn = FIXERS[id];
+    if (!fn) continue;
+    const next = fn(html, opts);
+    if (next === html) continue;
+
+    if (verified && CODE_FIXERS.has(id)) {
+      const after = inlineScripts(stripShim(next));
+      let broke = null;
+      for (let i = 0; i < after.length; i++) {
+        const err = parseError(after[i]);
+        if (err && !baseline[i]) { broke = err; break; }
+      }
+      if (broke) { reverted.push({ id, error: broke }); continue; }
+    }
+    applied.push(id);
+    html = next;
+  }
+  return { html, applied, reverted, verified };
+}
+
+/**
+ * Fix everything that can be fixed without a human. Idempotent.
+ *
+ * Whether the file already had a Google exit of its own is decided HERE, on
+ * the original document, and handed to the fixers. Deciding it later would be
+ * wrong: exit-rewrite runs first and writes an ExitApi.exit() call, after
+ * which every file looks like a native Google build.
+ */
+function fixAll(html, opts = {}) {
+  const nativeGoogleExit = /\bExitApi\s*\.\s*exit\s*\(/.test(stripShim(html)) && exitApiScript(html).present;
+  return applyFixes(html, FIX_ORDER, { nativeGoogleExit, ...opts });
+}
+
+/* ------------------------------------------------------------------ *
+ * Package-level helpers (ZIP entries, not HTML)
+ * ------------------------------------------------------------------ */
+
+/** Google's filename rule, applied per path segment; empty segments become "_". */
+function sanitizeName(name) {
+  return name.split('/').map((seg) => seg
+    .normalize('NFKD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^A-Za-z0-9._-]+/g, '_')
+    .replace(/_+(?=\.)|(?<=\.)_+/g, '')
+    .replace(/^_+|_+$/g, '') || '_').join('/');
+}
+
+const isSafeName = (name) => SAFE_NAME_RE.test(name);
+
+/**
+ * Google wants the entry HTML at the ZIP root. Vendor archives routinely wrap
+ * everything in one folder; when every entry shares that folder, strip it.
+ */
+function reroot(entries) {
+  const tops = new Set(entries.map((e) => e.name.split('/')[0]));
+  const hasNested = entries.every((e) => e.name.includes('/'));
+  if (tops.size !== 1 || !hasNested) return entries;
+  const prefix = [...tops][0] + '/';
+  return entries.map((e) => ({ ...e, name: e.name.slice(prefix.length) }));
+}
+
+/** The playable's entry document inside a ZIP: index.html first, then any root .html, then any .html. */
+function pickEntry(entries) {
+  const htmls = entries.filter((e) => /\.html?$/i.test(e.name));
+  return htmls.find((e) => /^index\.html?$/i.test(e.name))
+    || htmls.find((e) => !e.name.includes('/'))
+    || htmls[0] || null;
+}
+
+return { ensureHead, buildShim, shimParts, stripShim, inlineScripts, parseError, canParse, applyFixes, fixAll, sanitizeName, reroot, pickEntry, FIXERS, FIX_ORDER, isSafeName };
+})();
+
+/* ---- engine/audit.mjs ---- */
+__rp['audit'] = (() => {
+/**
+ * Compliance audit for a playable, against the Google Ads target.
+ *
+ * Answers "what is wrong with this file?" before and after conversion. Every
+ * finding is derived from the file itself — no model, no network — which is
+ * what makes the result reproducible and arguable, and what makes the
+ * readiness percentage mean something.
+ *
+ * Two areas:
+ *   technical  the upload/validator and the ad slot: size, structure, exit,
+ *              prohibited constructs, self-containment.
+ *   policy     what a policy reviewer disapproves: system-UI mimicry, data
+ *              collection, sound on load, and the copy patterns behind the
+ *              most common disapprovals (see rules.mjs).
+ *
+ * Severity is consequence, not confidence:
+ *   blocker  rejected at upload, cannot click through, or a certain policy
+ *            disapproval.
+ *   warn     accepted but frequently disapproved, or measurably worse.
+ *   advice   fine as-is; there is a better version.
+ *
+ * `fix` names the converter fixer that resolves the finding (see convert.mjs),
+ * or null with `manual` describing what a human has to do instead.
+ */
+
+const {
+  GOOGLE_ADS_LIMITS, PROHIBITED, POLICY_TEXT_RULES, CTA_RE, STORAGE_RE, DIALOG_RE, AUTOPLAY_RE, SUSPECT_NAV, ENABLER_CALL_RE,
+} = __rp['rules'];
+const { inspect, extractText, markupOnly, inventoryImages } = __rp['inspect'];
+const { stripShim, shimParts, isSafeName, inlineScripts, parseError } = __rp['convert'];
+
+const f = (id, severity, area, title, detail, extra = {}) => ({
+  id, severity, area, title, detail, fix: null, manual: null, measured: null,
+  // quote: Google's own words backing this finding, where we have them.
+  // sourced: false means the rule rests on something the captured policy page
+  // does not state, and the finding says so instead of implying Google did.
+  quote: '', sourced: false, ...extra,
+});
+
+const MB = (n) => `${(n / 1048576).toFixed(2)} MB`;
+
+/**
+ * @param {string} html   entry HTML of the playable (converted or not)
+ * @param {object} pkg    { zipBytes, entries: [{ name, size, stored }], entryName }
+ *                        zipBytes is the DEFLATED size the file would upload at.
+ * @param {object} opts   { orientation } — reserved for target options
+ * @returns {{ findings, info, text, shim }}
+ */
+function audit(html, pkg = {}, opts = {}) {
+  const info = inspect(html);
+  const code = stripShim(html);
+  const markup = markupOnly(code);   // element checks: tags only, never script bodies
+  const shim = shimParts(html);
+  const text = extractText(code);
+  const findings = [];
+  const entries = pkg.entries ?? [];
+
+  /* ---------------- packaging ---------------- */
+
+  if (pkg.zipBytes != null) {
+    if (pkg.zipBytes > GOOGLE_ADS_LIMITS.maxZipBytes) {
+      const stored = entries.some((e) => e.stored);
+      findings.push(f('zip-size', 'blocker', 'technical', 'Over the 5 MB cap',
+        'Google Ads rejects App campaign playables above 5 MB.',
+        stored
+          ? { fix: 'repack', measured: `${MB(pkg.zipBytes)} stored — recompressing usually recovers enough` }
+          : { manual: 'Re-encode the largest images as WebP or drop unused assets; nothing automatic gets a deflated file under the cap.', measured: `${MB(pkg.zipBytes)} of 5 MB` }));
+    } else if (pkg.zipBytes > GOOGLE_ADS_LIMITS.maxZipBytes * 0.95) {
+      findings.push(f('zip-headroom', 'advice', 'technical', 'Almost no room under the cap',
+        'Under 5% headroom. Any later edit can push the ZIP over.',
+        { measured: `${MB(pkg.zipBytes)} — ${((1 - pkg.zipBytes / GOOGLE_ADS_LIMITS.maxZipBytes) * 100).toFixed(1)}% free` }));
+    }
+  }
+
+  if (entries.length > GOOGLE_ADS_LIMITS.maxFiles) {
+    findings.push(f('zip-files', 'blocker', 'technical', 'Too many files in the ZIP',
+      `The cap is ${GOOGLE_ADS_LIMITS.maxFiles} files.`, { measured: `${entries.length} files`, manual: 'Merge or drop assets.' }));
+  }
+
+  const badNames = entries.filter((e) => !isSafeName(e.name));
+  if (badNames.length) {
+    findings.push(f('filenames', 'blocker', 'technical', 'Filenames contain disallowed characters',
+      'Google allows only letters, numbers, dot, dash and underscore in file and folder names — spaces and parentheses are rejected.',
+      { fix: 'sanitize-names', measured: badNames.slice(0, 3).map((e) => e.name).join(', ') + (badNames.length > 3 ? ` +${badNames.length - 3} more` : '') }));
+  }
+
+  const htmls = entries.filter((e) => /\.html?$/i.test(e.name));
+  if (htmls.length && !htmls.some((e) => !e.name.includes('/'))) {
+    const tops = new Set(entries.map((e) => e.name.split('/')[0]));
+    findings.push(f('entry-not-root', 'warn', 'technical', 'Entry HTML is not at the ZIP root',
+      'Google looks for the HTML at the root of the archive. Vendor exports often wrap everything in a folder.',
+      tops.size === 1 ? { fix: 'reroot', measured: htmls[0].name } : { manual: 'Move the entry HTML and its assets to the root.', measured: htmls[0].name }));
+  }
+
+  /* ---------------- document integrity ---------------- */
+
+  if (!info.hasDoctype) {
+    findings.push(f('doctype', 'warn', 'technical', 'Missing <!DOCTYPE html>',
+      'Without it browsers fall back to quirks mode, which changes layout maths the game may rely on.', { fix: 'doctype' }));
+  }
+  if (!info.terminated) {
+    findings.push(f('truncated', 'blocker', 'technical', 'HTML is not terminated',
+      'No closing </html> near the end — the file is likely truncated and will not run.', { manual: 'Re-export the playable.' }));
+  }
+
+  // Last line of defence. A script that does not parse takes its whole block
+  // with it and the ad renders blank, which every other check here would miss.
+  for (const script of inlineScripts(code)) {
+    const err = parseError(script);
+    if (!err) continue;
+    findings.push(f('script-syntax', 'blocker', 'technical', 'An inline script is not valid JavaScript',
+      'The browser runs none of that block, so the ad renders blank. Do not upload this file.',
+      { manual: 'Re-export the playable. If conversion caused this, report the file so the converter can be corrected.', measured: err.slice(0, 160) }));
+    break;
+  }
+  if (!/<meta[^>]+charset/i.test(html.slice(0, 4000))) {
+    findings.push(f('charset', 'warn', 'technical', 'No charset declared',
+      'Non-ASCII copy renders as mojibake without an explicit charset.', { fix: 'charset' }));
+  }
+  if (!/<meta[^>]+name=["']?viewport/i.test(html)) {
+    findings.push(f('viewport', 'warn', 'technical', 'No viewport meta tag',
+      'Mobile browsers assume a desktop width and scale the canvas down — the ad renders small and blurry.', { fix: 'viewport' }));
+  }
+
+  const orient = html.match(/<meta[^>]+name=["']?ad\.orientation["']?[^>]*content=["']?([^"'>]+)/i);
+  if (!orient) {
+    findings.push(f('ad-orientation', 'warn', 'technical', 'No ad.orientation meta',
+      'Google does not reject this — the asset silently renders portrait-only. Declare the orientations the game supports.',
+      { fix: 'orientation', measured: 'expected <meta name="ad.orientation" content="portrait|landscape|portrait,landscape">' }));
+  } else if (!/^\s*(portrait|landscape|portrait\s*,\s*landscape|landscape\s*,\s*portrait)\s*$/i.test(orient[1])) {
+    findings.push(f('ad-orientation-bad', 'warn', 'technical', 'Malformed ad.orientation value',
+      'Anything Google cannot parse falls back to portrait-only, silently.', { fix: 'orientation', measured: orient[1].trim() }));
+  }
+
+  /* ---------------- other networks' SDKs ---------------- */
+
+  const sdkRefs = info.localRefs.filter((r) => /\b(?:mraid|dapi)\.js$/i.test(r.ref));
+  if (sdkRefs.length) {
+    findings.push(f('sdk-script', 'blocker', 'technical', `Loads ${sdkRefs.map((r) => r.ref).join(', ')}`,
+      'The old network injected this file at serve time. On Google it does not exist: the request 404s and the creative usually never boots.',
+      { fix: 'remove-sdk-script', measured: sdkRefs.map((r) => `<${r.tag} src="${r.ref}">`).join(' ') }));
+  }
+
+  const missing = info.localRefs.filter((r) => !sdkRefs.includes(r) && !entries.some((e) => e.name === r.ref || e.name.endsWith('/' + r.ref)));
+  if (missing.length) {
+    findings.push(f('missing-local-ref', missing.some((r) => r.tag === 'script') ? 'blocker' : 'warn', 'technical',
+      'References files that are not in the package',
+      'A single-file playable must inline everything. These paths will 404 in the ad slot.',
+      { manual: 'Inline the asset as a data: URI or add it to the ZIP.', measured: missing.slice(0, 4).map((r) => r.ref).join(', ') + (missing.length > 4 ? ` +${missing.length - 4} more` : '') }));
+  }
+
+  /**
+   * Does the creative carry a Google exit of its own? Universal SDKs bundle
+   * every network into one file and pick at runtime, so MRAID code proves
+   * nothing on its own. The exitapi.js tag is NOT required here: a missing tag
+   * is its own finding and the converter always adds it, so a file with an
+   * ExitApi.exit() call is one tag away from running its own Google path.
+   */
+  const nativeGoogle = /\bExitApi\s*\.\s*exit\s*\(/.test(code);
+
+  /**
+   * One finding for all of them, not one per network.
+   *
+   * A multi-network export carrying MRAID, DAPI and FbPlayableAd is not three
+   * times worse than one carrying MRAID alone: it is a single fact about how
+   * the file was built, and a single fixer resolves all of them together.
+   * Charging it three times drove real files straight past the floor to 0%.
+   */
+  const sdk = [
+    { part: 'mraid', re: /\bmraid\b/, label: 'MRAID', boot: 'MRAID creatives wait for the `ready` event or poll getState() before starting; with no SDK they sit on a black screen.' },
+    { part: 'dapi', re: /\bdapi\s*\./, label: 'ironSource DAPI', boot: 'DAPI creatives wait for isReady() or the `ready` event before starting.' },
+    { part: 'facebook', re: /\bFbPlayableAd\b/, label: 'FbPlayableAd', boot: 'The CTA calls FbPlayableAd.onCTAClick(), which throws when the object is absent.' },
+  ];
+  const present = sdk.filter((s) => s.re.test(code) && !shim.includes(s.part));
+  if (present.length) {
+    const names = present.map((s) => s.label).join(', ');
+    findings.push(nativeGoogle
+      ? f('sdk-also', 'warn', 'technical', `One bundle built for several networks (${names})`,
+        'It already calls ExitApi.exit(), so the Google path is present and the other networks\' code should be unreachable here. The converter installs stand-ins anyway, because a creative can wait on another network\'s SDK before it will start.',
+        { fix: 'sdk-shim', measured: names })
+      : f('sdk-calls', 'blocker', 'technical', `Talks to ${names}, which Google does not provide`,
+        `${present[0].boot} The converter installs stand-ins that report ready immediately and route the click to ExitApi.exit().`,
+        { fix: 'sdk-shim', measured: names }));
+  }
+  // Same rule as above: a file with its own ExitApi.exit() call is a
+  // multi-network build. Its unsupported networks are branches that the Google
+  // path makes unreachable, not a broken exit — so this drops to advice and
+  // says what to look for instead of implying the click may be lost.
+  for (const n of info.networks) {
+    if (n.id === 'google' || n.shim) continue;
+    findings.push(nativeGoogle
+      ? f(`sdk-also-${n.id}`, 'advice', 'technical', `Also carries ${n.label} code`,
+        'This SDK cannot be stood in for, but the file already calls ExitApi.exit(), so its Google path should win and this branch never run. Worth one look in the preview: tap the CTA and check the green badge appears.',
+        { manual: 'Tap the CTA in the preview; the badge confirms the click reached ExitApi.exit().' })
+      : f(`sdk-unsupported-${n.id}`, 'warn', 'technical', `Built for ${n.label}`,
+        'This SDK cannot be shimmed automatically, and the file has no Google exit of its own. Confirm in the preview that the creative boots and that its CTA reaches ExitApi.exit().',
+        { manual: 'Preview it; wire the CTA to ExitApi.exit() by hand if it does not fire.' }));
+  }
+
+  /* ---------------- exit ---------------- */
+
+  // `window.__rpExitTo = url` is what the converter leaves behind when it
+  // rewrites a navigation: the shim installs a setter on it that calls
+  // ExitApi.exit(). It counts as a Google exit. Missing it made correctly
+  // converted files report a "no exit" blocker and read as "Will be rejected".
+  const hasGoogleExit = /\bExitApi\s*\.\s*exit\s*\(/.test(code)
+    || (/\b__rpExitTo\s*=(?!=)/.test(code) && shim.includes('nav'))
+    || info.exits.superHtml;
+  const outboundLinks = (code.match(/<a\b[^>]*\bhref\s*=\s*["']https?:\/\//gi) || []).length;
+  const rewritable = info.exits.network.length + info.exits.custom.length + outboundLinks;
+  if (!hasGoogleExit) {
+    findings.push(f('no-google-exit', 'blocker', 'technical', 'Nothing calls ExitApi.exit()',
+      'Google registers the click-through only via ExitApi.exit(). Without it the ad cannot convert, and custom exits are disapproved.',
+      rewritable
+        ? { fix: 'exit-rewrite', measured: [...info.exits.network.map((x) => x.excerpt), ...info.exits.custom.map((x) => x.excerpt)].slice(0, 3).join(' · ') || `${outboundLinks} outbound link(s)` }
+        : { manual: 'Find the CTA handler and call ExitApi.exit() from it.' }));
+  }
+  // With a working Google exit already present, a window.open() or location
+  // change is almost always a fallback branch for another network that Google
+  // never reaches. Still worth a look, but it is not why an upload fails.
+  if (info.exits.custom.length) {
+    findings.push(nativeGoogle
+      ? f('custom-exit-fallback', 'warn', 'technical', 'Also navigates on its own in places',
+        'The file already exits through ExitApi.exit(), so these are most likely fallback branches for another network. Google rejects custom exits it actually reaches, so confirm these are unreachable, or let the converter route them through ExitApi.exit() too.',
+        { fix: 'exit-rewrite', measured: info.exits.custom.slice(0, 3).map((x) => x.excerpt).join(' · ') })
+      : f('custom-exit', 'blocker', 'technical', 'Navigates on its own instead of calling ExitApi.exit()',
+        'window.open() and location changes are custom exits — Google rejects them (CUSTOM_EXIT_NOT_ALLOWED) and they lose the click.',
+        { fix: 'exit-rewrite', measured: info.exits.custom.slice(0, 3).map((x) => x.excerpt).join(' · ') }));
+  }
+  if (outboundLinks) {
+    findings.push(f('custom-exit-link', nativeGoogle ? 'warn' : 'blocker', 'technical', 'Outbound <a href> links',
+      'A plain link to the store is a custom exit. The click has to go through ExitApi.exit().',
+      { fix: 'exit-rewrite', measured: `${outboundLinks} link(s)` }));
+  }
+
+  SUSPECT_NAV.lastIndex = 0;
+  const suspect = [...code.matchAll(SUSPECT_NAV)];
+  if (suspect.length) {
+    findings.push(f('suspect-nav', 'warn', 'technical', 'Navigates through a reference the converter cannot identify',
+      'Something like `frame.location.href = url`. If that object is a window, this is a custom exit Google rejects. The converter will not rewrite it, because the object may not be a window at all.',
+      { manual: 'Check by hand; if it is an exit, call ExitApi.exit() instead.',
+        measured: suspect.slice(0, 3).map((m) => code.slice(Math.max(0, m.index - 12), m.index + 30).replace(/\s+/g, ' ').trim()).join(' · ') }));
+  }
+
+  const tag = info.exitApiScript;
+  if (!tag.present) {
+    findings.push(f('exitapi-script', 'blocker', 'technical', 'exitapi.js is not loaded',
+      'App campaign playables must load exitapi.js from tpc.googlesyndication.com as a literal <script> in <head>. Without it ExitApi is undefined at click time.',
+      { fix: 'exitapi-script' }));
+  } else if (!tag.inHead || !tag.official) {
+    findings.push(f('exitapi-placement', 'warn', 'technical', tag.inHead ? 'exitapi.js loaded from a non-official URL' : 'exitapi.js is not in <head>',
+      'The literal tag belongs in <head> and must point at Google\'s own URL. Anywhere else, Google makes the whole ad area clickable at serve time — a flood of accidental clicks.',
+      { fix: 'exitapi-script' }));
+  }
+  if (/exitapi\.js/i.test(code.replace(/<script[^>]+src\s*=\s*["'][^"']*exitapi\.js[^"']*["'][^>]*>\s*<\/script>/gi, ''))) {
+    findings.push(f('exitapi-dynamic', 'warn', 'technical', 'exitapi.js is also injected from JavaScript',
+      'When exitapi.js is added by script, Google treats the entire ad as the click target.',
+      { manual: 'Remove the dynamic injection; the literal tag in <head> is enough.' }));
+  }
+
+  /* ---------------- prohibited constructs ---------------- */
+
+  STORAGE_RE.lastIndex = 0;
+  if (STORAGE_RE.test(code)) {
+    findings.push(f('prohibited-storage', 'blocker', 'technical', 'Uses browser storage',
+      'localStorage, sessionStorage and IndexedDB are prohibited in HTML5 ad assets. The converter swaps them for in-memory stand-ins.',
+      { fix: 'storage-shim', measured: [...new Set(code.match(STORAGE_RE) || [])].join(', ') }));
+  }
+  for (const p of PROHIBITED) {
+    // Enabler is a JS API; the rest are tags.
+    if (!p.re.test(p.id === 'enabler' ? code : markup)) continue;
+    // The fixer, where the table names one. Enabler is the exception: removing
+    // the script tag only helps a file that never calls into the API.
+    const fixable = p.fix && !(p.id === 'enabler' && ENABLER_CALL_RE.test(code));
+    const extra = fixable ? { fix: p.fix } : { manual: 'Needs a change in the creative itself.' };
+    findings.push(f(`prohibited-${p.id}`, 'blocker', 'technical', `Prohibited: ${p.label}`, p.why, { measured: p.label, ...extra }));
+  }
+  if (/<video(?![^>]*\bsrc=)[^>]*>/i.test(markup)) {
+    findings.push(f('prohibited-video-nosrc', 'blocker', 'technical', 'Prohibited: <video> without src',
+      'A <video> element with no src attribute is disallowed in Google Ads HTML5 assets.', { manual: 'Give the element a src or remove it.' }));
+  }
+  if (info.externalHosts.length) {
+    findings.push(f('external-refs', 'blocker', 'technical', 'Loads resources from outside the package',
+      'Playables must be self-contained. Anything fetched at runtime is a "fourth-party call" and fails in the ad slot; only Google\'s own hosts are permitted.',
+      { manual: 'Inline the resources as data: URIs.', measured: info.externalHosts.join(', ') }));
+  }
+
+  /* ---------------- policy: behaviour ---------------- */
+
+  DIALOG_RE.lastIndex = 0;
+  if (DIALOG_RE.test(code) && !shim.includes('dialog')) {
+    findings.push(f('dialogs', 'warn', 'Misrepresentation · Misleading ad design', 'Opens native alert/confirm/prompt dialogs',
+      'System-style dialogs read as mimicking device UI and interrupt the ad. The converter overrides them with no-ops from the shim, leaving the creative\'s own code untouched.',
+      { fix: 'dialog-shim' }));
+  }
+  if (AUTOPLAY_RE.test(markup)) {
+    findings.push(f('autoplay-media', 'warn', 'Technical · Sound before interaction', 'Media is set to autoplay',
+      'Sound may not play before the user interacts with the ad. The converter removes the autoplay attribute.',
+      { fix: 'strip-autoplay' }));
+  }
+  if (info.hasAudio && !shim.includes('audio')) {
+    findings.push(f('audio-ungated', 'advice', 'Technical · Sound before interaction', 'Audio present without an interaction gate',
+      'Google requires all sound to be user-initiated and to stop on the exit click. The converter holds play()/resume() until the first touch and pauses everything on exit.',
+      { fix: 'audio-gate' }));
+  }
+  if (/<form(?=[\s>])|<textarea(?=[\s>])|<input(?=[\s>/])(?![^>]*\btype\s*=\s*["']?(?:hidden|checkbox|radio|range|file|button|submit|image|color)\b)/i.test(markup)) {
+    findings.push(f('data-collection', 'blocker', 'Data collection and use', 'Contains text-entry fields',
+      'An ad may not collect personal information. Any form or text input in the creative is a disapproval.',
+      { manual: 'Remove the input fields; collect nothing inside the ad.' }));
+  }
+  if (/(?:id|class)\s*=\s*["'][^"']*\b(?:close|skip|dismiss)(?:-?btn|-?button)?\b[^"']*["']|>\s*[×✕✖]\s*</i.test(markup)) {
+    findings.push(f('close-control', 'advice', 'Misrepresentation · Misleading ad design', 'Has a close/skip-style control',
+      'Non-functional close buttons are a named disapproval. If this control is part of gameplay, make sure it visibly does something; if it imitates the ad\'s own close button, remove it.',
+      { manual: 'Verify in the preview.' }));
+  }
+
+  /* ---------------- policy: copy ---------------- */
+
+  /**
+   * Canvas playables draw their words instead of writing them. A PixiJS or
+   * Cocos creative renders every headline and button label into a WebP, so the
+   * document holds engine error strings and nothing a reviewer would read.
+   *
+   * That has to be said out loud. Every copy rule below matches against text,
+   * so on such a file they all pass while checking nothing at all — a silent
+   * clean bill of health on wording no one has looked at. The AI review is the
+   * only pass here that can read the art.
+   */
+  const images = inventoryImages(code, { max: 200 });
+  const artBytes = images.reduce((n, i) => n + i.bytes, 0);
+  const markupProse = text.filter((t) => t.where === 'markup' && /\s/.test(t.text)).length;
+  const copyIsArt = images.length >= 6 && artBytes > 50_000 && markupProse === 0;
+  if (copyIsArt) {
+    findings.push(f('copy-in-images', 'warn', 'Policy · coverage', 'The ad\'s wording is drawn into its images',
+      'Nothing readable was found in the document, so none of the copy checks below could examine this creative. They did not pass; they had nothing to read. Use the AI review, which is given a contact sheet of the artwork, or read the preview yourself.',
+      { manual: 'Run the AI policy review, or check the wording by eye in the preview.',
+        measured: `${images.length} inlined images, ${(artBytes / 1024).toFixed(0)} KB of artwork, ${text.length} readable strings and none of them ad copy` }));
+  }
+
+  for (const rule of POLICY_TEXT_RULES) {
+    const hits = [];
+    for (const t of text) {
+      const m = rule.re.exec(t.text);
+      if (m) hits.push({ match: m[0].trim(), text: t.text, where: t.where });
+      if (hits.length >= 3) break;
+    }
+    if (!hits.length) continue;
+    findings.push(f(`copy-${rule.id}`, rule.severity, rule.area, rule.label, rule.why, {
+      manual: 'Change the copy.',
+      // Google's own sentence where the captured page states the rule, so a
+      // finding can be checked rather than taken on trust.
+      quote: rule.source || '',
+      sourced: !!rule.source,
+      measured: hits.map((h) => `“${h.text.length > 60 ? h.text.slice(0, 57) + '…' : h.text}”${h.where === 'script' ? ' (script string)' : ''}`).join(' · '),
+    }));
+  }
+  // Pointless to report on a creative whose every word is a picture: the
+  // copy-in-images finding above already says the text cannot be read.
+  if (!copyIsArt && text.length && !text.some((t) => CTA_RE.test(t.text))) {
+    findings.push(f('no-cta-copy', 'advice', 'Editorial · Clear call to action', 'No recognisable CTA copy',
+      'No "Install", "Download", "Play now" or similar text was found. Fine if the CTA is drawn art; a reviewer still wants an unmistakable exit action.',
+      { manual: 'Ignore if the CTA is an image.' }));
+  }
+
+  return { findings, info, text, shim };
+}
+
+/** One-line verdict for a headline. */
+function verdict(findings) {
+  const counts = { blocker: 0, warn: 0, advice: 0 };
+  for (const x of findings) counts[x.severity]++;
+  if (counts.blocker) return { label: 'Will be rejected', tone: 'bad' };
+  if (counts.warn) return { label: 'Accepted, but weaker than it should be', tone: 'warn' };
+  return { label: 'Meets the checks we can verify', tone: 'ok' };
+}
+
+return { audit, verdict };
+})();
+
+/* ---- engine/score.mjs ---- */
+__rp['score'] = (() => {
+/**
+ * Readiness score.
+ *
+ * A percentage implies more precision than static checks can deliver — only
+ * Google's own HTML5 validator and a policy reviewer decide acceptance. So the
+ * number is defined in the simplest arguable way: start at 100, subtract a
+ * fixed cost per finding, and never let a file with a blocker read as ready.
+ *
+ *   blocker  −25   rejected at upload, cannot click through, or a certain
+ *                  policy disapproval
+ *   warn      −8   accepted but frequently disapproved or measurably worse
+ *   advice    −2   worth fixing when cheap
+ *
+ * The verdict is NOT just a function of the number. A blocker the converter
+ * clears with one button is a different situation from one a person has to sit
+ * down and solve, and saying "Will be rejected" about the first is how a tool
+ * teaches people to ignore it. So blockers are split: `mustFix` counts the ones
+ * with no automatic fix, and only those make a file read as rejected.
+ */
+const PENALTY = { blocker: 25, warn: 8, advice: 2 };
+
+function score(findings) {
+  const counts = { blocker: 0, warn: 0, advice: 0 };
+  let cost = 0, mustFix = 0, autoFix = 0;
+  for (const f of findings) {
+    counts[f.severity] = (counts[f.severity] || 0) + 1;
+    cost += PENALTY[f.severity] || 0;
+    if (f.severity !== 'blocker') continue;
+    if (f.fix) autoFix++; else mustFix++;
+  }
+  const pct = Math.max(0, 100 - cost);
+
+  let verdict;
+  if (mustFix) verdict = { label: 'Will be rejected', tone: 'bad' };
+  else if (autoFix) verdict = { label: 'Not uploadable as-is · Fix all clears it', tone: 'warn' };
+  else if (pct >= 90) verdict = { label: counts.warn ? 'Ready, with warnings' : 'Ready to upload', tone: 'ok' };
+  else if (counts.warn) verdict = { label: 'Uploadable · worth a look first', tone: 'warn' };
+  else verdict = { label: 'Uploadable · minor notes', tone: 'ok' };
+
+  return { pct, counts, verdict, cost, mustFix, autoFix };
+}
+
+return { score, PENALTY };
+})();
+
+/* ---- engine/zip.mjs ---- */
+__rp['zip'] = (() => {
+/**
+ * Minimal ZIP read/write built on the platform's own DEFLATE.
+ *
+ * No JSZip, no CDN: CompressionStream/DecompressionStream ship in every browser
+ * that can run a Cocos playable, and in Node 18+. That keeps the tool page a
+ * single file that works with the network unplugged.
+ *
+ * Only what a Google Ads playable needs: stored + deflate entries, no
+ * encryption, no ZIP64, no directories.
+ */
+
+const LOCAL = 0x04034b50, CENTRAL = 0x02014b50, EOCD = 0x06054b50;
+
+let CRC_TABLE = null;
+function crc32(bytes) {
+  if (!CRC_TABLE) {
+    CRC_TABLE = new Int32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      CRC_TABLE[n] = c;
+    }
+  }
+  let c = -1;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ -1) >>> 0;
+}
+
+/**
+ * MS-DOS packed date/time. Writing zeros here yields month 0 / day 0, which is
+ * not a real date: readers either clamp it to 1980-01-01 or complain. Vendor
+ * ZIPs carry a genuine timestamp, so ours should too.
+ */
+function dosDateTime(d = new Date()) {
+  const year = Math.max(1980, d.getFullYear());
+  return {
+    time: (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1),
+    date: ((year - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate(),
+  };
+}
+
+async function runStream(bytes, stream) {
+  const res = new Response(new Blob([bytes]).stream().pipeThrough(stream));
+  return new Uint8Array(await res.arrayBuffer());
+}
+const inflateRaw = (b) => runStream(b, new DecompressionStream('deflate-raw'));
+const deflateRaw = (b) => runStream(b, new CompressionStream('deflate-raw'));
+
+/** Read a ZIP into [{ name, bytes }]. Walks the central directory, not the stream. */
+async function readZip(buffer) {
+  const buf = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const out = [];
+
+  for (let p = 0; p < buf.length - 4; p++) {
+    if (dv.getUint32(p, true) !== CENTRAL) continue;
+    const method = dv.getUint16(p + 10, true);
+    const compSize = dv.getUint32(p + 20, true);
+    const nameLen = dv.getUint16(p + 28, true);
+    const extraLen = dv.getUint16(p + 30, true);
+    const commentLen = dv.getUint16(p + 32, true);
+    const localOff = dv.getUint32(p + 42, true);
+    const name = new TextDecoder().decode(buf.subarray(p + 46, p + 46 + nameLen));
+
+    const lNameLen = dv.getUint16(localOff + 26, true);
+    const lExtraLen = dv.getUint16(localOff + 28, true);
+    const dataAt = localOff + 30 + lNameLen + lExtraLen;
+    const raw = buf.subarray(dataAt, dataAt + compSize);
+
+    if (!name.endsWith('/')) {
+      const bytes = method === 8 ? await inflateRaw(raw) : raw.slice();
+      // `stored` is what tells the audit a recompress is available.
+      out.push({ name, bytes, stored: method === 0, size: bytes.length });
+    }
+    p += 46 + nameLen + extraLen + commentLen - 1;
+  }
+  return out;
+}
+
+/**
+ * Write [{ name, bytes }] to a ZIP, always DEFLATE.
+ * Vendor playables often arrive STORED, so recompressing is usually the single
+ * biggest size win available and costs nothing.
+ */
+async function writeZip(files) {
+  const locals = [], central = [];
+  let offset = 0, count = 0;
+  const { time, date } = dosDateTime();
+
+  for (const f of files) {
+    const nameBytes = new TextEncoder().encode(f.name);
+    // Bit 11 tells the reader the name is UTF-8. Without it a non-ASCII name is
+    // decoded as CP437 — real risk here, since vendor files arrive with
+    // Vietnamese names.
+    const flags = [...f.name].every((c) => c.charCodeAt(0) < 128) ? 0 : 0x800;
+    const data = f.bytes instanceof Uint8Array ? f.bytes : new Uint8Array(f.bytes);
+    const comp = await deflateRaw(data);
+    const crc = crc32(data);
+
+    const lh = new Uint8Array(30);
+    const ldv = new DataView(lh.buffer);
+    ldv.setUint32(0, LOCAL, true); ldv.setUint16(4, 20, true); ldv.setUint16(6, flags, true);
+    ldv.setUint16(8, 8, true); ldv.setUint16(10, time, true); ldv.setUint16(12, date, true);
+    ldv.setUint32(14, crc, true); ldv.setUint32(18, comp.length, true);
+    ldv.setUint32(22, data.length, true); ldv.setUint16(26, nameBytes.length, true);
+    locals.push(lh, nameBytes, comp);
+
+    const ch = new Uint8Array(46);
+    const cdv = new DataView(ch.buffer);
+    cdv.setUint32(0, CENTRAL, true); cdv.setUint16(4, 20, true); cdv.setUint16(6, 20, true);
+    cdv.setUint16(8, flags, true); cdv.setUint16(10, 8, true);
+    cdv.setUint16(12, time, true); cdv.setUint16(14, date, true); cdv.setUint32(16, crc, true);
+    cdv.setUint32(20, comp.length, true); cdv.setUint32(24, data.length, true);
+    cdv.setUint16(28, nameBytes.length, true); cdv.setUint32(42, offset, true);
+    central.push(ch, nameBytes);
+
+    offset += 30 + nameBytes.length + comp.length;
+    count++;
+  }
+
+  const centralBytes = concat(central);
+  const eocd = new Uint8Array(22);
+  const edv = new DataView(eocd.buffer);
+  edv.setUint32(0, EOCD, true);
+  edv.setUint16(8, count, true); edv.setUint16(10, count, true);
+  edv.setUint32(12, centralBytes.length, true); edv.setUint32(16, offset, true);
+
+  return concat([...locals, centralBytes, eocd]);
+}
+
+function concat(chunks) {
+  let total = 0;
+  for (const c of chunks) total += c.length;
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) { out.set(c, at); at += c.length; }
+  return out;
+}
+
+return { readZip, writeZip };
+})();
+
+/* ---- engine/policy-rubric.mjs ---- */
+__rp['policy-rubric'] = (() => {
+/**
+ * GENERATED — do not edit. Run `node engine/build-rubric.mjs` to regenerate.
+ *
+ * Google's advertising policies, captured verbatim. The AI review is given
+ * this text and told to judge against it alone, so that a finding can be
+ * traced back to a sentence Google actually wrote.
+ *
+ * Source:   https://support.google.com/adspolicy/answer/6008942?hl=en
+ * Title:    Google Ads policies - Advertising Policies Help
+ * Captured: 2026-09-10
+ */
+
+const POLICY_SOURCE = {
+  url: "https://support.google.com/adspolicy/answer/6008942?hl=en",
+  title: "Google Ads policies - Advertising Policies Help",
+  captured: "2026-09-10",
+};
+
+/**
+ * NOTE ON SCOPE: this is Google's overview page. Each policy links to its own
+ * detail page, and those are not captured here. Sub-policies such as
+ * "Misleading ad design" and "Clickbait" therefore have no source text in this
+ * file, and nothing may be asserted about them from it.
+ */
+const POLICY_TEXT = `# Google Ads policies
+
+Display & Video 360 users must comply with this Google Ads policy. Visit the Display & Video 360 help center for additional restrictions.
+
+
+## Welcome to the Google Advertising Policies Center
+
+
+## Overview of our policies and how we enforce them
+
+We strive to support a healthy digital advertising ecosystem that's trustworthy and transparent for users, advertisers, and publishers. The purpose of this help center is to help you build Google Ads campaigns that align with our advertising policies listed below.
+
+These policies are designed to ensure a safe and positive experience for our users and abide by applicable laws. This means that our policies prohibit content that is harmful to users and the overall advertising ecosystem.
+
+Our advertising policies cover 4 broad areas:
+
+- Prohibited content : Content you can't advertise on the Google Network
+- Prohibited practices : Things you can't do if you want to advertise with us
+- Restricted content and features : Content you can advertise, but with limitations
+- Editorial and technical : Quality standards for your ads, websites, and apps
+To learn more about which policies are included in these broad categories, click the links for the category names to review the content below. For additional details about each policy, click the header of the section to learn more.
+
+We use a combination of Google AI and human evaluation to ensure that ads comply with these policies. Our enforcement technologies use Google AI, modeled on human reviewers’ decisions, to help protect our users and keep our ad platforms safe. More complex, nuanced or severe cases are often reviewed and evaluated by our specially-trained experts.
+
+We take action on content that violates our policies. This may include disapproving violating ads so they don’t serve, as well as suspending accounts for repeat or egregious violations. We take repeat violations of our policies seriously and continue to expand a strike system for repeat offenders.
+
+We will provide you with information on our decision for any policy violation enforcement actions we take. If one of your ads is disapproved, you can fix that ad or appeal the decision . You can also appeal an account suspension decision . For these links to work, you’ll need to be signed into your Google Ads account.
+
+
+## Prohibited content
+
+
+### Counterfeit goods
+
+Google Ads prohibits the sale or promotion for sale of counterfeit goods. Counterfeit goods contain a trademark or logo that is identical to or substantially indistinguishable from the trademark of another. They mimic the brand features of the product in an attempt to pass themselves off as a genuine product of the brand owner. This policy applies to the content of your ad and your website or app.
+
+
+### Dangerous products or services
+
+Examples of dangerous content (non-exhaustive) : Recreational drugs (chemical or herbal); psychoactive substances; equipment to facilitate drug use; weapons, ammunition, explosive materials and fireworks; instructions for making explosives or other harmful products; tobacco products
+
+
+### Enabling dishonest behavior
+
+Google Ads values honesty and fairness and doesn’t allow the promotion of products or services that are designed to enable dishonest behavior. Below are some examples of what to avoid in your ads. Learn more about What happens if you violate our policies .
+
+Examples of products or services that enable dishonest behavior (non-exhaustive) : Hacking software or instructions; services designed to artificially inflate ad or website traffic; fake documents; academic cheating services
+
+
+### Inappropriate content
+
+Google Ads values diversity and respect for others and strives to avoid offending users, so ads or destinations that display shocking content or promote hatred, intolerance, discrimination, or violence aren’t allowed.
+
+Examples of inappropriate or offensive content (non-exhaustive) : bullying or intimidation of an individual or group, racial discrimination, content promoting hate groups or hate group paraphernalia, graphic crime scene or accident images, cruelty to animals, murder, self-harm, extortion or blackmail, sale or trade of endangered species, ads using profane language, and content promoting the sexual exploitation of minors
+
+
+## Prohibited practices
+
+
+### Abusing the ad network
+
+Ads across the Google Network should be useful, varied, relevant, and safe for users. Google Ads doesn't allow advertisers to attempt to trick or circumvent our ad review processes with their ads, content, or destinations.
+
+Learn more about the Abusing the ad network policy .
+
+Examples of abusing of the ad network (non-exhaustive) : promoting content that contains malware; "cloaking" or using other techniques to hide the true destination that users are directed to; "arbitrage" or promoting destinations for the sole or primary purpose of showing ads; promoting "bridge" or "gateway" destinations that are solely designed to send users elsewhere; advertising with the sole or primary intent of gaining public social network endorsements from the user; "gaming" or manipulating settings in an attempt to circumvent our policy review systems
+
+
+### Data collection and use
+
+Google wants users to trust that information about them will be respected and handled with appropriate care. As such, the advertising partners shouldn’t misuse this information, nor collect it for unclear purposes or without appropriate disclosures or security measures.
+
+Examples of user information that should be handled with care (non-exhaustive) : full name; email address; mailing address; phone number; national identity, pension, social security, tax ID, health care, or driver's license number; birth date or mother's maiden name in addition to any of the above information; financial status; political affiliation; sexual orientation; race or ethnicity; religion
+
+Examples of irresponsible data collection & use (non-exhaustive) : obtaining credit card information over a non-secure server, promotions that claim to know a user's sexual orientation or financial status, violations of our policies that apply to interest-based advertising and remarketing
+
+
+### Misrepresentation
+
+Ads or destinations that deceive users by excluding relevant product information or providing misleading information about products, services, and businesses can compromise user trust in the Google Ads platform. The Misrepresentation policy strives to ensure that ads are clear, honest, and provide information that users need to make informed decisions.
+
+Below are some examples of what to avoid in your ads. If your ads or website violate these policies, you can learn more about What happens if you violate our policies .
+
+Examples of misrepresentation (non-exhaustive) : omitting or obscuring billing details such as how, what, and when users will be charged; omitting or obscuring charges associated with financial services such as interest rates, fees, and penalties; failing to display tax or licence numbers, contact information, or physical address where relevant; making offers that aren't actually available; making misleading or unrealistic claims regarding weight loss or financial gain; collecting donations under false pretenses; "phishing" or falsely purporting to be a reputable company in order to get users to part with valuable personal or financial information
+
+
+## Restricted content and features
+
+The policies below cover content that is sometimes legally or culturally sensitive. Online advertising can be a powerful way to reach customers, but in sensitive areas, we also work hard to avoid showing these ads when and where they might be inappropriate.
+
+For that reason, we allow the promotion of the content below, but on a limited basis. These promotions may not show to every user in every location, and advertisers may need to meet additional requirements before their ads are eligible to run. Note that not all ad products, features, or networks are able to support this restricted content. Further details can be found in the Policy Manager .
+
+
+### Ad protections for children and teens
+
+Our child and teen ads policies, along with other Google Ads policies (including but not limited to those for alcohol, gambling, and high fat, sugar, and salt food and beverages), work together to provide strong protections that include:
+
+- Disabling ads personalization
+- Restricting sensitive ad content and categories
+We require all our advertisers to follow local legal requirements when using our products, including any regulations on advertising to users under age 18, as well as all Google Ads policies. Learn more about our Ad protections for children and teens and relevant ad policies, where they apply, and what they mean for advertisers.
+
+
+### Sexual content
+
+Ads should respect user preferences and comply with legal regulations. Google Ads restricts certain kinds of sexual content in ads and destinations, which will only show in limited scenarios based on user search queries, user age and local laws where the ad is being served. Ads must not target minors.
+
+Examples of restricted sexual content (non-exhaustive) : Visible genitalia and female breasts, sex toys, strip clubs, sexually suggestive live chat, models in sexualized poses
+
+
+### Alcohol
+
+We abide by local alcohol laws and industry standards, so we don’t allow certain kinds of alcohol-related advertising, both for alcohol and drinks that resemble alcohol. Some types of alcohol-related ads are allowed if they meet the policies below, don’t target minors, and target only countries that are explicitly allowed to show alcohol ads.
+
+Examples of restricted alcoholic beverages (non-exhaustive) : beer, wine, sake, spirits or hard alcohol, Champagne, fortified wine, non-alcoholic beer, non-alcoholic wine, non-alcoholic distilled spirits
+
+
+### Copyrights
+
+We abide by local copyright laws and protect the rights of copyright holders, so we don’t allow ads that are unauthorized to use copyrighted content. If you are legally authorized to use copyrighted content, apply for certification (or here for DV360 ) to advertise. If you see unauthorized content, submit a copyright-related complaint .
+
+Examples of restricted copyrighted content (non-exhaustive) : sites or apps that facilitate unauthorized offline distribution of copyrighted content; unauthorized sites or software that capture, copy, or provide access to copyrighted content
+
+
+### Gambling and games
+
+We support responsible gambling advertising and abide by local gambling laws and industry standards, so we don’t allow certain kinds of gambling-related advertising. Gambling-related ads are allowed if they comply with the policies below and the advertiser has received the proper Google Ads certification. Gambling ads must target approved countries, have a landing page that displays information about responsible gambling, and never target minors. Check local regulations for the areas you want to target.
+
+Examples of restricted gambling-related content (non-exhaustive) : physical casinos; sites where users can bet on poker, bingo, roulette, or sports events; national or private lotteries; sports odds aggregator sites; sites offering bonus codes or promotional offers for gambling sites; online educational materials for casino-based games; sites offering "poker-for-fun" games; non-casino-based cash game sites
+
+
+### Healthcare and medicines
+
+Google Ads is dedicated to following advertising regulations for healthcare and medicine, so ads and destinations are expected to follow appropriate laws and industry standards. Some types of healthcare-related content can’t be advertised at all, while others can only be advertised in certain locations by advertisers who have applied and been approved to advertise those products or services using Google Ads.
+
+For most healthcare policies, if your ad campaign targets allowed locations and the domain is properly certified, your ad will be labeled " Eligible (limited) " and can run in allowed locations.
+
+Below are some examples of healthcare content that is allowed in certain circumstances. You’re expected to familiarize yourself with the local law and regulations for any location your ads target. Learn about what happens if you violate our policies .
+
+Examples of restricted healthcare content (non-exhaustive) : clinical trial recruitment; HIV home tests; addiction services; prescription drug services
+
+
+### Political content
+
+We support responsible political advertising and expect all political ads and destinations to comply with local campaign and election laws for any areas they target. This policy includes legally mandated election “silence periods.”
+
+Examples of political content (non-exhaustive) : promotion of political parties or candidates, political issue advocacy
+
+
+### Financial products and services
+
+Google is committed to helping users make informed financial decisions. Google Ads policies are designed to provide users with the information they need to weigh the costs of financial products and services and to protect them from harmful or deceptive practices.
+
+Under this policy, financial products and services are defined as products and services related to the management or investment of money and cryptocurrencies , including personalized advice.
+
+When promoting financial products and services, you must comply with state and local regulations for any location that your ads target. For example, include specific disclosures required by local law. Advertisers are expected to do their own research on the local regulations for any location their ads target.
+
+This policy is updated with additional product-specific guidelines on an ongoing basis. Learn more about What happens if you violate our policies .
+
+Examples of restricted Financial products and services (non-exhaustive): personal loans, loan modification, credit repair services
+
+
+### Cryptocurrencies and related products
+
+Due to the complex and evolving nature of regulations related to cryptocurrencies and related products and services, we allow certain categories of cryptocurrency-related products and services to be advertised with and without certification by Google in limited circumstances.
+
+While most advertisers must be certified by Google, there may be limited circumstances where certification is not required.
+
+Examples of cryptocurrency businesses that may not require certification (non-exhaustive): businesses accepting payment in cryptocurrency, cryptocurrency mining hardware, NFT games that allow players to purchase in-game items, like virtual apparel for a player’s characters, consumed or used in a game to enhance a user’s experience or aid users in advancing the game.
+
+Examples of cryptocurrency businesses that require certification (non-exhaustive): cryptocurrency exchanges, cryptocurrency wallets, cryptocurrency coin trusts
+
+When promoting cryptocurrencies and related products, you must comply with state and local regulations for any region or country that your ads target. Refer to our non-exhaustive list of location-specific requirements for more information but note that advertisers are expected to do their own research on the local regulations for any location their ads target.
+
+
+### Dating and Companionship
+
+Google values diversity, inclusivity, and respect for others, so we support the promotion of general dating services that aren’t discriminatory, exploitative, or deceptive. Dating and Companionship ads are allowed if they comply with our policies, don’t allow users under 18, and the advertiser has received the proper Google Ads certification. These ads may be restricted based on the ad category, user age, local laws, the user’s SafeSearch settings, and the user’s sexual content search queries.
+
+Examples of restricted dating and companionship content (non-exhaustive): Aggregators that list or review other dating sites, dating ads or landing pages that feature racy content, and dating explicitly focused on sexual themes or encounters such as hook-up, swinger, or affair dating services
+
+
+### Trademarks
+
+
+### Legal requirements
+
+You’re always responsible for ensuring that you comply with all applicable laws and regulations, in addition to Google's advertising policies, for all of the locations where your ads are showing.
+
+
+### Other restricted businesses
+
+
+### Restricted ad formats and features
+
+There are multiple factors that determine access to advanced ad formats and features on Google Ads. Certain ad formats are not available for all advertisers until they meet our specific requirements or complete the certification process.
+
+
+### Limited ad serving
+
+To protect the integrity of our Google Ads ecosystem, we limit impressions of ads that have a higher potential of causing abuse or a poor experience for our users. In these specific instances, only qualified advertisers will be able to serve ads without impression limits. Learn more about when limited ad serving applies and who is a qualified advertiser.
+
+
+## Editorial and technical requirements
+
+We want to deliver ads that are engaging for users without being annoying or difficult to interact with, so we've developed editorial requirements to help keep your ads appealing to users. We've also specified technical requirements to help users and advertisers get the most out of the variety of ad formats we offer.
+
+
+### Editorial
+
+To ensure that ads on the Google Ad Network uphold high editorial and professional standards, Google Ads only allows ads, assets, and destinations that are clear, easy to interact with, and relevant to users.
+
+Learn about what happens if you violate our policies .
+
+Examples of promotions that don't meet these editorial and professional requirements (non-exhaustive) : overly generic ads that contain vague phrases such as "Buy products here"; gimmicky use of words, numbers, letters, punctuation, or symbols such as FREE, f-r-e-e, and F₹€€!!
+
+
+### Destination requirements
+
+We want consumers to have a good experience when they click on an ad, so ad destinations must offer unique value to users and be functional, useful, and easy to navigate.
+
+Examples of promotions that don't meet destination requirements (non-exhaustive) : Display URLs that don’t accurately reflect the URL of the landing page, sites or apps that are under construction; sites that aren’t viewable in commonly used browsers; sites that have disabled the browser’s back button
+
+
+### Technical requirements
+
+In order to provide an engaging user experience, Google requires that all ads, assets, and destinations meet certain technical requirements to make sure your ads are useful and appealing. Ads must be clear, functional, and lead users to content that is relevant and easy to interact with.
+
+Examples of promotions that don't meet technical requirements (non-exhaustive) : exceeding account limits for ads and other content; ads or destination content in an unsupported targeting language; HTML5 ads that don’t function properly or appear blank
+
+
+### Ad format requirements
+
+In order to help you provide a quality user experience and deliver attractive, professional-looking ads, we only allow ads that comply with specific requirements for each ad format. Review the requirements for all ad formats that you're using.
+
+We don't allow Non-family safe ads in image ads, video ads, and other non-text ad formats. Learn more about our Sexual content policy.
+
+Advertisers participating in beta programs of new ad formats should reach out to their Google Ads representatives or Google Ads customer support to learn about format-specific policy requirements.
+
+Examples of ad format requirements (non-exhaustive) : character limits for the ad headline or body, image size requirements, file size limits, video length limits, aspect ratios
+
+
+## About our policies
+
+Google Ads enables businesses of all sizes, from around the world, to promote a wide variety of products, services, applications, and websites on Google and across our network. We want to help you reach existing and potential customers and audiences. However, to help create a safe and positive experience for users, we listen to their feedback and concerns about the types of ads they see. We also regularly review changes in online trends and practices, industry norms, and regulations. And finally, in crafting our policies, we also think about our values and culture as a company, as well as operational, technical, and business considerations. As a result, we have created a set of policies that apply to all promotions on the Google Network.
+
+Google requires that advertisers comply with all applicable laws and regulations and the Google policies described above. It's important that you familiarize yourself with and keep up to date on these requirements for the places where your business operates, as well as any other places your ads are showing. When we find content that violates these requirements, we may block it from appearing, and in cases of repeated or egregious violations, we may stop you from advertising with us.
+
+Advertisers have a responsibility not to promote content or engage in behavior that risks harm to our users, employees, or the Ads ecosystem. If we see such content or behavior, we may take action, including but not limited to restricting or blocking your ads or suspending your account.
+
+If you have questions about the policies, review the policy guidelines and examples provided or contact Google Ads Support .`;
+
+return { POLICY_SOURCE, POLICY_TEXT };
+})();
+
+/* ---- engine/aiscan.mjs ---- */
+__rp['aiscan'] = (() => {
+/**
+ * Optional AI policy review — provider-neutral.
+ *
+ * Off by default and only reachable with an API key the operator pastes in.
+ * The deterministic audit already scores the file; this pass covers what
+ * pattern matching cannot see — the art (violence, sexual content, brands,
+ * fake system UI drawn as pixels) and copy that reads as misleading in context.
+ *
+ * What is sent, for every provider: the ad's visible strings and ONE
+ * downscaled JPEG contact sheet of its largest images, plus the policy rubric.
+ * Never the file itself, never full-resolution art. The model never edits
+ * anything; its findings are advisory, labelled AI, and do not move the
+ * readiness percentage.
+ *
+ * The key goes straight from the browser to the provider the operator chose
+ * and nowhere else. Raw HTTP on purpose: the tool is a single dependency-free
+ * page, and each provider's request shape is a dozen lines.
+ */
+
+const { inventoryImages } = __rp['inspect'];
+const { POLICY_TEXT, POLICY_SOURCE } = __rp['policy-rubric'];
+
+
+
+/* ------------------------------------------------------------------ *
+ * Providers
+ * ------------------------------------------------------------------ */
+
+/**
+ * Only services whose models READ IMAGES are offered. The whole point of this
+ * pass is to judge the art — fake system dialogs drawn as pixels, borrowed
+ * logos, imagery that misrepresents the game. A text-only model cannot do
+ * that, and copy is already covered by the deterministic rules in rules.mjs,
+ * so a text-only option would only look like coverage without being any.
+ *
+ * `api` names the request shape, not the company: everything except Gemini and
+ * Anthropic speaks the OpenAI chat-completions dialect, which is why Kimi,
+ * Qwen and GLM need no adapter of their own, only a base URL.
+ */
+const PROVIDERS = {
+  gemini: {
+    label: 'Google Gemini', api: 'gemini', keyHint: 'AIza…',
+    models: [
+      { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash (fast, cheap)' },
+      { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (stricter)' },
+    ],
+    defaultModel: 'gemini-3.5-flash',
+  },
+  anthropic: {
+    label: 'Anthropic Claude', api: 'anthropic', keyHint: 'sk-ant-…',
+    models: [
+      { id: 'claude-opus-5', label: 'Claude Opus 5 (strictest)' },
+      { id: 'claude-sonnet-5', label: 'Claude Sonnet 5' },
+      { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 (fast, cheap)' },
+    ],
+    defaultModel: 'claude-opus-5',
+  },
+  openai: {
+    label: 'OpenAI', api: 'openai', keyHint: 'sk-…',
+    models: [
+      { id: 'gpt-4o', label: 'GPT-4o' },
+      { id: 'gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
+      { id: 'gpt-4.1', label: 'GPT-4.1' },
+    ],
+    defaultModel: 'gpt-4o',
+  },
+  moonshot: {
+    label: 'Kimi · Moonshot AI', api: 'openai', keyHint: 'sk-…',
+    endpoint: 'https://api.moonshot.cn/v1',
+    endpointNote: 'Mainland China endpoint. Outside China use https://api.moonshot.ai/v1',
+    models: [
+      { id: 'kimi-latest', label: 'kimi-latest' },
+      { id: 'moonshot-v1-32k-vision-preview', label: 'moonshot-v1-32k-vision-preview' },
+    ],
+    defaultModel: 'kimi-latest',
+  },
+  qwen: {
+    label: 'Qwen · Alibaba DashScope', api: 'openai', keyHint: 'sk-…',
+    endpoint: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    endpointNote: 'International endpoint. Inside China use https://dashscope.aliyuncs.com/compatible-mode/v1',
+    models: [
+      { id: 'qwen-vl-max', label: 'qwen-vl-max' },
+      { id: 'qwen-vl-plus', label: 'qwen-vl-plus (cheaper)' },
+    ],
+    defaultModel: 'qwen-vl-max',
+  },
+  zhipu: {
+    label: 'GLM · Zhipu AI', api: 'openai', keyHint: 'your GLM key',
+    endpoint: 'https://open.bigmodel.cn/api/paas/v4',
+    models: [
+      { id: 'glm-4v-plus', label: 'glm-4v-plus' },
+      { id: 'glm-4v-flash', label: 'glm-4v-flash (cheaper)' },
+    ],
+    defaultModel: 'glm-4v-plus',
+  },
+  compatible: {
+    label: 'Any other OpenAI-compatible endpoint', api: 'compatible', keyHint: 'key for that endpoint',
+    endpointNote: 'OpenRouter, Azure, SiliconFlow, a company proxy, or a local server. Pick a model that reads images.',
+    models: [],
+    defaultModel: '',
+    needsEndpoint: true,
+  },
+};
+
+const DEFAULT_PROVIDER = 'gemini';
+
+/**
+ * Model families known to reject images. No preset uses one, but the custom
+ * model field accepts anything, so a typed id is checked against this and the
+ * page warns before the call rather than after the API refuses it.
+ */
+const TEXT_ONLY = /^(?:deepseek|o1-mini|text-|gpt-3)|^qwen-(?:plus|turbo|max|long)|^glm-4-|^moonshot-v1-\d+k$/i;
+
+/** Can this model read the contact sheet? Unknown ids are assumed capable. */
+function supportsVision(providerId, modelId) {
+  return !TEXT_ONLY.test(String(modelId || '').trim());
+}
+
+/**
+ * Which service a pasted key belongs to, when the key itself says so.
+ *
+ * Google and Anthropic use distinctive prefixes, and Zhipu issues an
+ * `id.secret` pair, so those three need no choosing. A bare `sk-…` is used by
+ * OpenAI, Moonshot and DashScope alike and cannot be told apart, so it returns
+ * null and the operator's current choice stands.
+ */
+function detectProvider(key) {
+  const k = String(key || '').trim();
+  if (/^sk-ant-/.test(k)) return 'anthropic';
+  if (/^AIza[\w-]{20,}$/.test(k)) return 'gemini';
+  if (/^[0-9a-zA-Z]{16,}\.[0-9a-zA-Z]{8,}$/.test(k)) return 'zhipu';
+  return null;
+}
+
+/**
+ * The rubric is Google's captured page, not a summary of it.
+ *
+ * It used to be prose I wrote from memory, which asserted sub-policies the
+ * source page does not contain. Now the model is handed the source text and
+ * told to judge against that alone and quote the sentence it relies on, so a
+ * finding can be checked against Google rather than taken on trust.
+ */
+
+
+/** The one prompt every provider gets. Asks for a JSON object so strict JSON modes are happy. */
+function buildPrompt({ texts, appName = '', network = '', imageCount = 0 }) {
+  const copy = texts.slice(0, 400).map((t, i) => `${i + 1}. ${JSON.stringify(t.text)}${t.where === 'script' ? '  [script string]' : ''}`).join('\n');
+  return `You are reviewing ONE HTML5 playable ad creative against Google's advertising policies, before it is uploaded to Google Ads.
+
+${appName ? `The promoted app is: ${JSON.stringify(appName)}.` : 'The promoted app is not stated.'}
+${network ? `The creative was originally built for: ${network}.` : ''}
+
+=== BEGIN GOOGLE ADS POLICIES (captured ${POLICY_SOURCE.captured} from ${POLICY_SOURCE.url}) ===
+${POLICY_TEXT}
+=== END GOOGLE ADS POLICIES ===
+
+RULES FOR THIS REVIEW — follow them exactly:
+1. Judge ONLY against the policy text above. Do not apply rules you remember from
+   elsewhere, and do not infer rules the text does not state.
+2. That text is Google's OVERVIEW page. Each policy has its own detail page which
+   is NOT included. So you do not have the detailed rules for any sub-policy. If a
+   concern would depend on a detail page you have not been given, you may still
+   raise it, but you MUST set "sourced" to false and leave "quote" empty.
+3. For every finding that IS supported by the text above, set "sourced" to true and
+   put the exact sentence or example you are relying on in "quote", copied verbatim.
+4. Report only what you can point at in this creative. Do not invent. If nothing in
+   the creative conflicts with the policy text, return an empty list.
+
+You are given (1) every visible text string found in the creative and (2) ${imageCount ? `one contact sheet with the creative's ${imageCount} largest images, numbered` : 'no images (the creative has no raster art)'}.
+
+Respond with JSON only, in this exact shape: {"findings": [ ... ]} where each finding has:
+- "policy": the policy heading from the text above, copied as written, e.g. "Editorial" or "Data collection and use"
+- "sourced": true if the policy text above states this rule, false if you are relying on knowledge not present in it
+- "quote": the verbatim sentence from the policy text that supports this finding, or "" when sourced is false
+- "severity": "blocker", "warn" or "advice"
+- "evidence": the exact string or image number in THIS creative you are reacting to, e.g. "string 12" or "image 3"
+- "why": one sentence on what a reviewer would object to
+- "suggestion": one sentence on the smallest change that fixes it
+
+Visible text strings:
+${copy || '(none found)'}`;
+}
+
+/* ------------------------------------------------------------------ *
+ * Request/response adapters — one per API shape
+ * ------------------------------------------------------------------ */
+
+const ADAPTERS = {
+  gemini: {
+    request({ key, model, prompt, imageB64 }) {
+      const parts = [{ text: prompt }];
+      if (imageB64) parts.push({ inline_data: { mime_type: 'image/jpeg', data: imageB64 } });
+      return {
+        url: `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,
+        headers: { 'Content-Type': 'application/json' },
+        body: { contents: [{ parts }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1, maxOutputTokens: 4096 } },
+      };
+    },
+    parse(json) {
+      const cand = json.candidates && json.candidates[0];
+      if (!cand || !cand.content) throw new Error('Empty response' + (cand ? ` (${cand.finishReason})` : ''));
+      if (cand.finishReason === 'MAX_TOKENS') throw new Error('Response truncated — try again');
+      const u = json.usageMetadata || {};
+      return { text: (cand.content.parts || []).map((p) => p.text || '').join(''), usage: { in: u.promptTokenCount || 0, out: u.candidatesTokenCount || 0 } };
+    },
+  },
+
+  anthropic: {
+    request({ key, model, prompt, imageB64 }) {
+      const content = [];
+      if (imageB64) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: imageB64 } });
+      content.push({ type: 'text', text: prompt });
+      const headers = {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        // Required for a browser to call the API directly with its own key.
+        'anthropic-dangerous-direct-browser-access': 'true',
+      };
+      const body = { model, max_tokens: 8192, messages: [{ role: 'user', content }] };
+      // Opus 5 / Fable can decline a request on safety grounds; let the API
+      // re-run it on a fallback model inside the same call.
+      if (/^claude-(opus-5|fable)/.test(model)) {
+        headers['anthropic-beta'] = 'server-side-fallback-2026-07-01';
+        body.fallbacks = 'default';
+      }
+      return { url: 'https://api.anthropic.com/v1/messages', headers, body };
+    },
+    parse(json) {
+      if (json.stop_reason === 'refusal') {
+        const cat = json.stop_details && json.stop_details.category;
+        throw new Error('The model declined to review this creative' + (cat ? ` (${cat})` : ''));
+      }
+      if (json.stop_reason === 'max_tokens') throw new Error('Response truncated — try again');
+      const u = json.usage || {};
+      return { text: (json.content || []).filter((b) => b.type === 'text').map((b) => b.text).join(''), usage: { in: u.input_tokens || 0, out: u.output_tokens || 0 } };
+    },
+  },
+
+  openai: {
+    request({ key, model, prompt, imageB64, endpoint, strictJson = true }) {
+      const content = [{ type: 'text', text: prompt }];
+      if (imageB64) content.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageB64}`, detail: 'high' } });
+      const base = (endpoint || 'https://api.openai.com/v1').replace(/\/+$/, '');
+      const body = { model, messages: [{ role: 'user', content }], temperature: 0.1, max_tokens: 4096 };
+      if (strictJson) body.response_format = { type: 'json_object' };
+      return { url: `${base}/chat/completions`, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` }, body };
+    },
+    parse(json) {
+      const msg = json.choices && json.choices[0] && json.choices[0].message;
+      if (!msg) throw new Error('Empty response');
+      const text = typeof msg.content === 'string' ? msg.content : (msg.content || []).map((p) => p.text || '').join('');
+      const u = json.usage || {};
+      return { text, usage: { in: u.prompt_tokens || 0, out: u.completion_tokens || 0 } };
+    },
+  },
+};
+// Third-party OpenAI-compatible endpoints do not all honour response_format; the prompt asks for JSON anyway.
+ADAPTERS.compatible = {
+  request: (o) => ADAPTERS.openai.request({ ...o, strictJson: false }),
+  parse: ADAPTERS.openai.parse,
+};
+
+/* ------------------------------------------------------------------ *
+ * Parsing
+ * ------------------------------------------------------------------ */
+
+/** JSON from a model reply: fenced, bare, or buried in prose. */
+function parseJsonLoose(text) {
+  const t = String(text || '').trim().replace(/^```(?:json)?\s*|\s*```$/g, '');
+  try { return JSON.parse(t); } catch { /* fall through */ }
+  const a = t.search(/[[{]/);
+  const b = Math.max(t.lastIndexOf(']'), t.lastIndexOf('}'));
+  if (a > -1 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch { /* fall through */ } }
+  throw new Error('Model did not return JSON');
+}
+
+const SEVERITIES = new Set(['blocker', 'warn', 'advice']);
+
+/**
+ * Coerce whatever the model returned into a clean list.
+ *
+ * `quote` only survives when it is genuinely present in the source text. A
+ * model that paraphrases Google, or invents a sentence, gets its claim of being
+ * sourced revoked rather than passed on as if Google had written it.
+ */
+function normalizeFindings(raw, sourceText = POLICY_TEXT) {
+  const list = Array.isArray(raw) ? raw : Array.isArray(raw?.findings) ? raw.findings : [];
+  const norm = (s) => String(s || '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, ' ').trim();
+  const haystack = norm(sourceText).toLowerCase();
+  return list.filter((x) => x && typeof x === 'object').map((x) => {
+    const quote = norm(x.quote).slice(0, 400);
+    // A quote counts only if it really appears in what we sent.
+    const verified = quote.length > 20 && haystack.includes(quote.toLowerCase());
+    return {
+      id: 'ai',
+      source: 'ai',
+      severity: SEVERITIES.has(String(x.severity).toLowerCase()) ? String(x.severity).toLowerCase() : 'warn',
+      area: String(x.policy || 'Policy').slice(0, 120),
+      title: String(x.why || x.policy || 'Policy concern').slice(0, 200),
+      detail: String(x.suggestion || '').slice(0, 400),
+      measured: String(x.evidence || '').slice(0, 200),
+      quote: verified ? quote : '',
+      sourced: verified,
+      fix: null,
+      manual: String(x.suggestion || 'Review by hand.').slice(0, 400),
+    };
+  });
+}
+
+/* ------------------------------------------------------------------ *
+ * The call
+ * ------------------------------------------------------------------ */
+
+/**
+ * Turn a bare "Failed to fetch" into something the operator can act on.
+ *
+ * A browser reports every blocked request identically and withholds the reason
+ * from JavaScript, so the message has to enumerate the causes rather than
+ * identify one. It names the host, because a firewall rule needs the host.
+ */
+function networkFailureHelp(url, err) {
+  let host = url;
+  try { host = new URL(url).host; } catch { /* keep the raw string */ }
+  const inViewer = typeof window !== 'undefined' && !!(window.claude && typeof window.claude.use === 'function');
+  const fromDisk = typeof location !== 'undefined' && location.protocol === 'file:';
+  const why = [];
+  if (inViewer) {
+    why.push('this page is running inside the claude.ai viewer, which blocks calls to outside services — download the single-file build and open that instead');
+  }
+  if (fromDisk) {
+    why.push(`the page was opened from a file, so the request carries no origin and ${host} may refuse it — serving the page over http (node engine/serve.mjs 8099) avoids that`);
+  }
+  why.push(`a network rule, VPN or extension is blocking ${host}`);
+  why.push('the key is fine either way: the request never reached the service, so it was never checked');
+  return `Could not reach ${host}. The browser blocked or refused the request before it was sent, and does not say which. Likely: ${why.join('; ')}. The browser console holds the real reason.`;
+}
+
+/**
+ * Run one review. `fetchImpl` is injectable so tests run without a network.
+ * @returns {{ findings: Array, usage: { in, out }, provider, model }}
+ */
+async function review({ provider = DEFAULT_PROVIDER, key, model, endpoint = '', texts = [], sheetB64 = null, imageCount = 0, appName = '', network = '', sendImages = true, fetchImpl = globalThis.fetch }) {
+  const p = PROVIDERS[provider];
+  if (!p) throw new Error(`Unknown provider "${provider}"`);
+  const ad = ADAPTERS[p.api];
+  if (!ad) throw new Error(`No adapter for API "${p.api}"`);
+  if (!key) throw new Error('No API key. Paste one to run the AI review.');
+  if (!model) throw new Error('Pick a model, or type a model id.');
+  const base = endpoint || p.endpoint || '';
+  if (p.api !== 'gemini' && p.api !== 'anthropic' && p.needsEndpoint && !base) {
+    throw new Error('This service needs an endpoint base URL.');
+  }
+  // A text-only model is sent the copy alone rather than an image it will reject.
+  const withImages = sendImages && !!sheetB64 && supportsVision(provider, model);
+  const prompt = buildPrompt({ texts, appName, network, imageCount: withImages ? imageCount : 0 });
+  const req = ad.request({ key, model, prompt, imageB64: withImages ? sheetB64 : null, endpoint: base });
+  let res;
+  try {
+    res = await fetchImpl(req.url, { method: 'POST', headers: req.headers, body: JSON.stringify(req.body) });
+  } catch (err) {
+    // fetch rejects only when the request never completed: blocked, refused or
+    // offline. The browser deliberately hides which, so "Failed to fetch" on
+    // its own tells the operator nothing. Name the causes instead.
+    throw new Error(networkFailureHelp(req.url, err));
+  }
+  if (!res.ok) throw new Error(`${p.label} ${res.status}: ${(await res.text()).slice(0, 240)}`);
+  const { text, usage } = ad.parse(await res.json());
+  const findings = normalizeFindings(parseJsonLoose(text));
+  return {
+    findings, usage, provider, model, sawImages: withImages,
+    sourced: findings.filter((f) => f.sourced).length,
+    unsourced: findings.filter((f) => !f.sourced).length,
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Browser-only: the contact sheet
+ * ------------------------------------------------------------------ */
+
+function b64ToBytes(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/**
+ * Draw the creative's largest images into numbered cells. Returns base64 JPEG
+ * and the number of images drawn, or null when there is no raster art.
+ * Decodes from the document's own bytes — no fetch, so it works offline and
+ * inside sandboxes that block network access.
+ */
+async function contactSheet(html, { max = 30, cols = 6, cell = 200 } = {}) {
+  if (typeof document === 'undefined') throw new Error('contactSheet needs a browser');
+  const imgs = inventoryImages(html, { max });
+  if (!imgs.length) return null;
+  const bitmaps = [];
+  for (const im of imgs) {
+    try {
+      const uri = html.substr(im.start, im.length);
+      const bytes = b64ToBytes(uri.slice(uri.indexOf(',') + 1));
+      bitmaps.push(await createImageBitmap(new Blob([bytes], { type: im.mime })));
+    } catch { /* undecodable image — skip it */ }
+  }
+  if (!bitmaps.length) return null;
+  const rows = Math.ceil(bitmaps.length / cols);
+  const canvas = document.createElement('canvas');
+  canvas.width = cols * cell; canvas.height = rows * cell;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#404040'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  bitmaps.forEach((bm, i) => {
+    const x = (i % cols) * cell, y = Math.floor(i / cols) * cell;
+    const k = Math.min((cell - 16) / bm.width, (cell - 16) / bm.height, 1);
+    ctx.drawImage(bm, x + (cell - bm.width * k) / 2, y + (cell - bm.height * k) / 2 + 6, bm.width * k, bm.height * k);
+    bm.close();
+    ctx.fillStyle = '#000'; ctx.fillRect(x, y, 34, 18);
+    ctx.fillStyle = '#ffeb3b'; ctx.font = 'bold 13px monospace'; ctx.fillText(String(i + 1), x + 4, y + 14);
+    ctx.strokeStyle = '#555'; ctx.strokeRect(x + .5, y + .5, cell - 1, cell - 1);
+  });
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+  return { b64: dataUrl.slice(dataUrl.indexOf(',') + 1), dataUrl, count: bitmaps.length };
+}
+
+return { supportsVision, detectProvider, buildPrompt, parseJsonLoose, normalizeFindings, networkFailureHelp, review, contactSheet, PROVIDERS, DEFAULT_PROVIDER, POLICY_SOURCE, POLICY_TEXT };
+})();
+
+/* ---- index.html ---- */
+
+const { audit } = __rp['audit'];
+const { fixAll, sanitizeName, reroot, pickEntry } = __rp['convert'];
+const { score } = __rp['score'];
+const { readZip, writeZip } = __rp['zip'];
+const { contactSheet, review, supportsVision, detectProvider, PROVIDERS, DEFAULT_PROVIDER, POLICY_SOURCE } = __rp['aiscan'];
+
+const $ = (id) => document.getElementById(id);
+// Browser storage can be absent or throw (private windows, sandboxed previews); the page must not care.
+const store = {
+  get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* remembered for this session only */ } },
+};
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const MBs = (n) => n < 102400 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(2) + ' MB';
+const resolvedCount = (f) => { const after = new Set((f.after?.findings || []).map((x) => x.id)); return f.before.findings.filter((x) => !after.has(x.id)).length; };
+
+/* ---------- state ---------- */
+const S = { files: [], sel: -1, fixed: false };
+
+function log(msg, cls = '') {
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.textContent = `${new Date().toLocaleTimeString()}  ${msg}`;
+  $('log').appendChild(d);
+  $('log').scrollTop = $('log').scrollHeight;
+}
+
+/* ---------- options ---------- */
+function orientationOpts() {
+  const v = $('orient').value;
+  return v === 'auto' ? { orientation: 'portrait', forceOrientation: false } : { orientation: v, forceOrientation: true };
+}
+$('orient').value = store.get('rp_orient') || 'auto';
+$('orient').addEventListener('change', async () => {
+  store.set('rp_orient', $('orient').value);
+  if (S.fixed) { await fixEverything(); }
+});
+
+/* ---------- ingest ---------- */
+$('drop').addEventListener('click', () => $('file').click());
+$('file').addEventListener('change', (e) => addFiles([...e.target.files]));
+['dragenter', 'dragover'].forEach((ev) => $('drop').addEventListener(ev, (e) => { e.preventDefault(); $('drop').classList.add('hot'); }));
+['dragleave', 'drop'].forEach((ev) => $('drop').addEventListener(ev, (e) => { e.preventDefault(); $('drop').classList.remove('hot'); }));
+$('drop').addEventListener('drop', (e) => addFiles([...e.dataTransfer.files]));
+document.addEventListener('dragover', (e) => e.preventDefault());
+document.addEventListener('drop', (e) => e.preventDefault());
+
+async function addFiles(list) {
+  const files = list.filter((f) => /\.(html?|zip)$/i.test(f.name));
+  if (!files.length) return log('nothing usable dropped — .html or .zip only', 'w');
+  for (const file of files) {
+    try {
+      const item = await ingest(file);
+      S.files.push(item);
+      log(`${item.name}: ${item.network} · readiness ${item.before.score.pct}% · ${item.before.findings.length} finding(s)`, item.before.score.counts.blocker ? 'w' : 's');
+    } catch (err) {
+      log(`${file.name}: ${err.message}`, 'e');
+    }
+  }
+  if (S.fixed) await fixEverything(); else render();
+  if (S.sel < 0 && S.files.length) select(0);
+}
+
+async function ingest(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let entries, entryName, html, kind;
+  if (/\.zip$/i.test(file.name)) {
+    kind = 'zip';
+    entries = await readZip(bytes);
+    const entry = pickEntry(entries);
+    if (!entry) throw new Error('no .html inside the ZIP');
+    entryName = entry.name;
+    html = new TextDecoder().decode(entry.bytes);
+  } else {
+    kind = 'html';
+    html = new TextDecoder().decode(bytes);
+    entryName = sanitizeName(file.name.replace(/\.htm$/i, '.html')) || 'index.html';
+    entries = [{ name: entryName, bytes, size: bytes.length, stored: false }];
+  }
+  const base = file.name.replace(/\.(html?|zip)$/i, '');
+  const item = { name: file.name, base, kind, entries, entryName, html, bytes, fixedHtml: null, applied: [], out: null, ai: null };
+  item.before = await measure(item, html, entries, kind === 'zip' ? bytes.length : null);
+  item.network = item.before.info.primary ? item.before.info.primary.label : (item.before.info.networks[0]?.label || 'unknown SDK');
+  return item;
+}
+
+/**
+ * Audit a document as it would upload: deflated. For a raw HTML we pack it to
+ * learn the size; for a ZIP that arrived stored we still report its real size
+ * (that is what Google would see if uploaded as-is).
+ */
+async function measure(item, html, entries, knownZipBytes) {
+  let zipBytes = knownZipBytes;
+  if (zipBytes == null) zipBytes = (await writeZip([{ name: item.entryName, bytes: new TextEncoder().encode(html) }])).length;
+  const a = audit(html, { zipBytes, entries: entries.map((e) => ({ name: e.name, size: e.size, stored: e.stored })), entryName: item.entryName }, orientationOpts());
+  return { ...a, score: score(a.findings), zipBytes };
+}
+
+/* ---------- fix ---------- */
+$('btnFixAll').addEventListener('click', fixEverything);
+
+async function fixEverything() {
+  const opts = orientationOpts();
+  $('btnFixAll').disabled = true;
+  for (const item of S.files) {
+    try {
+      const r = fixAll(item.html, opts);
+      item.fixedHtml = r.html;
+      item.applied = r.applied;
+      item.reverted = r.reverted;
+      item.verified = r.verified;
+      // A reverted fixer means a rewrite would have broken this file's JavaScript.
+      // The finding it was meant to resolve stays on the list for a human.
+      for (const rv of r.reverted) log(`${item.name}: skipped "${rv.id}" — it would have broken the script (${rv.error})`, 'w');
+      // package: reroot + sanitise names, swap in the fixed entry, deflate
+      let entries = reroot(item.entries).map((e) => ({ ...e, name: sanitizeName(e.name) }));
+      const entryName = sanitizeName(reroot([{ name: item.entryName }])[0].name);
+      entries = entries.map((e) => e.name === entryName ? { ...e, bytes: new TextEncoder().encode(r.html), size: r.html.length, stored: false } : e);
+      const zip = await writeZip(entries.map((e) => ({ name: e.name, bytes: e.bytes })));
+      item.out = { zip, entries, entryName, name: (sanitizeName(item.base) || 'playable') + '_google.zip' };
+      item.after = { ...audit(r.html, { zipBytes: zip.length, entries: entries.map((e) => ({ name: e.name, size: e.size, stored: false })), entryName }, opts) };
+      item.after.score = score(item.after.findings);
+      item.after.zipBytes = zip.length;
+      log(`${item.name}: fixed ${r.applied.length} thing(s) → ${item.after.score.pct}% · ${MBs(zip.length)} · ${item.after.findings.length} left for a human`, item.after.score.counts.blocker ? 'w' : 's');
+    } catch (err) {
+      log(`${item.name}: fix failed — ${err.message}`, 'e');
+    }
+  }
+  S.fixed = true;
+  render();
+  if (S.sel > -1) select(S.sel);
+}
+
+/* ---------- render ---------- */
+function pctClass(p) { return p >= 90 ? 'ok' : p >= 60 ? 'warn' : 'bad'; }
+
+function render() {
+  const has = S.files.length > 0;
+  $('listCard').style.display = has ? '' : 'none';
+  $('detailGrid').style.display = has ? '' : 'none';
+  $('btnFixAll').disabled = !has;
+  $('btnDlAll').disabled = !has;
+  $('btnAiOne').disabled = !has || !$('apiKey').value.trim();
+  $('btnAiAll').disabled = !has || !$('apiKey').value.trim();
+  if (!has) { $('rows').innerHTML = ''; $('summary').innerHTML = ''; return; }
+
+  const cur = (f) => (S.fixed && f.after ? f.after : f.before);
+  const avg = (k) => Math.round(S.files.reduce((n, f) => n + (f[k] ? f[k].score.pct : 0), 0) / S.files.length);
+  // What a person still has to do. Blockers the converter clears on its own are
+  // not this number, or pressing Fix all would never move it.
+  const mustFix = S.files.reduce((n, f) => n + (cur(f)?.score.mustFix || 0), 0);
+  const ready = S.files.filter((f) => cur(f)?.score.verdict.tone === 'ok').length;
+  $('summary').innerHTML = `
+    <div class="stat"><small>Files</small><b>${S.files.length}</b></div>
+    <div class="stat"><small>Avg readiness</small><b class="${pctClass(avg('before'))}">${avg('before')}%</b>${S.fixed ? ` <span class="arrow">→</span> <b class="${pctClass(avg('after'))}">${avg('after')}%</b>` : ''}</div>
+    <div class="stat"><small>Ready to upload</small><b>${ready} / ${S.files.length}</b></div>
+    <div class="stat" title="Blockers with no automatic fix"><small>Needs a person</small><b style="color:${mustFix ? 'var(--bad)' : 'var(--ok)'}">${mustFix}</b></div>`;
+
+  $('rows').innerHTML = S.files.map((f, i) => {
+    const cur = S.fixed && f.after ? f.after : f.before;
+    const c = cur.score.counts;
+    const fixable = f.before.findings.filter((x) => x.fix).length;
+    const blockerChip = cur.score.mustFix
+      ? `<span class="chip blocker">${cur.score.mustFix} needs a person</span>`
+      : cur.score.autoFix ? `<span class="chip warn">${cur.score.autoFix} Fix all clears</span>`
+      : `<span class="chip ok">nothing blocking</span>`;
+    const chips = blockerChip
+      + (c.warn ? `<span class="chip warn">${c.warn} to review</span>` : '')
+      + (c.advice ? `<span class="chip advice">${c.advice} advice</span>` : '')
+      + (S.fixed ? `<span class="chip">${resolvedCount(f)} fixed</span>` : (fixable ? `<span class="chip">${fixable} auto-fixable</span>` : ''))
+      + (f.ai ? `<span class="chip ai">AI: ${f.ai.length} concern${f.ai.length === 1 ? '' : 's'}</span>` : '');
+    return `<tr class="file${i === S.sel ? ' sel' : ''}" data-i="${i}">
+      <td><div class="name">${esc(f.name)}</div><div class="net">${esc(f.network)} · ${f.kind === 'zip' ? f.entries.length + ' file(s) · ' : ''}${MBs(f.before.zipBytes)} deflated</div></td>
+      <td><span class="pct ${S.fixed ? 'dim' : pctClass(f.before.score.pct)}">${f.before.score.pct}%</span>${S.fixed && f.after ? `<span class="arrow">→</span><span class="pct ${pctClass(f.after.score.pct)}">${f.after.score.pct}%</span>` : ''}</td>
+      <td><div class="chips">${chips}</div></td>
+      <td><div class="acts"><button class="ghost mini" data-act="preview" data-i="${i}">Preview</button><button class="ghost mini" data-act="dl" data-i="${i}" ${f.out ? '' : 'disabled title="Press Fix all first"'}>.zip</button></div></td>
+    </tr>`;
+  }).join('');
+}
+
+$('rows').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-act]');
+  if (btn) {
+    const i = Number(btn.dataset.i);
+    if (btn.dataset.act === 'preview') { select(i); renderPreview(); }
+    if (btn.dataset.act === 'dl') downloadOne(S.files[i]);
+    return;
+  }
+  const tr = e.target.closest('tr.file');
+  if (tr) select(Number(tr.dataset.i));
+});
+
+$('btnClear').addEventListener('click', () => { S.files = []; S.sel = -1; S.fixed = false; render(); $('detail').innerHTML = ''; $('frame').src = 'about:blank'; });
+
+function select(i) {
+  S.sel = i;
+  render();
+  renderDetail();
+  renderPreview();
+}
+
+function findingHtml(x, { done = false } = {}) {
+  const sev = done ? 'ok' : x.severity;
+  return `<div class="f${done ? ' done' : ''}">
+    <div class="t"><span class="chip ${sev}">${done ? 'fixed' : x.severity}</span><b>${esc(x.title)}</b>
+      <span class="area">${esc(x.area === 'technical' ? 'Technical' : x.area)}</span>
+      ${!done && x.fix ? '<span class="fixlabel">auto-fixable</span>' : ''}${x.source === 'ai' ? '<span class="chip ai">AI</span>' : ''}</div>
+    <div class="d">${esc(x.detail)}</div>
+    ${x.measured ? `<div class="m">found: <i>${esc(x.measured)}</i></div>` : ''}
+    ${!done && x.manual ? `<div class="m">to do: <i>${esc(x.manual)}</i></div>` : ''}
+    ${x.quote ? `<div class="q">Google: “${esc(x.quote)}”</div>`
+      : (x.area && x.area !== 'technical' && !done ? '<div class="m unsourced">Not stated on the policy page loaded into this tool. Treat as a prompt to check, not as Google\'s wording.</div>' : '')}
+  </div>`;
+}
+
+function renderDetail() {
+  const f = S.files[S.sel];
+  if (!f) { $('detail').innerHTML = ''; return; }
+  const cur = S.fixed && f.after ? f.after : f.before;
+  const parts = [];
+  parts.push(`<h2>${esc(f.name)} <span class="spacer"></span>${f.out ? `<button class="ghost mini" id="btnDlSel">Download ${esc(f.out.name)}</button>` : ''}</h2>`);
+  parts.push(`<div class="headline"><div class="big ${pctClass(cur.score.pct)}" style="color:var(--${pctClass(cur.score.pct)})">${cur.score.pct}%</div>
+    <div><div class="verdict ${cur.score.verdict.tone}">${esc(cur.score.verdict.label)}</div>
+    <div class="hint">${esc(f.network)} · ${MBs(cur.zipBytes)} deflated of 5 MB${S.fixed && f.after ? ` · was ${f.before.score.pct}% before Fix all` : ''}</div></div></div>`);
+
+  if (S.fixed && f.after) {
+    const afterIds = new Set(f.after.findings.map((x) => x.id));
+    const resolved = f.before.findings.filter((x) => !afterIds.has(x.id));
+    parts.push(`<div class="group">Still needs a human · ${f.after.findings.length}</div>`);
+    parts.push(f.after.findings.length ? f.after.findings.map((x) => findingHtml(x)).join('') : '<div class="hint">Nothing. Upload the .zip to Google\'s HTML5 validator for the final check.</div>');
+    if (f.ai) {
+      parts.push(`<div class="group">AI policy review · ${f.ai.length} concern${f.ai.length === 1 ? '' : 's'} (advisory)</div>`);
+      parts.push(f.ai.length ? f.ai.map((x) => findingHtml(x)).join('') : '<div class="hint">The model raised nothing.</div>');
+    }
+    parts.push(`<div class="group">Fixed automatically · ${resolved.length}</div>`);
+    parts.push(resolved.length ? resolved.map((x) => findingHtml(x, { done: true })).join('') : '<div class="hint">Nothing needed fixing.</div>');
+    if (f.reverted && f.reverted.length) {
+      parts.push(`<div class="group">Skipped to protect the file · ${f.reverted.length}</div>`);
+      parts.push(f.reverted.map((rv) => `<div class="f"><div class="t"><span class="chip warn">skipped</span><b>${esc(rv.id)}</b></div>
+        <div class="d">This rewrite would have produced JavaScript that does not parse, which renders the ad blank. It was dropped and the file left as it was.</div>
+        <div class="m">would have caused: <i>${esc(rv.error)}</i></div></div>`).join(''));
+    }
+    parts.push(`<details style="margin-top:10px"><summary>What the converter did (${f.applied.length})${f.verified === false ? ' · output not parse-checked here' : ''}</summary><div class="hint" style="margin-top:6px">${f.applied.map((a) => `<code>${esc(a)}</code>`).join(' ') || 'nothing'}</div></details>`);
+  } else {
+    const auto = f.before.findings.filter((x) => x.fix), manual = f.before.findings.filter((x) => !x.fix);
+    parts.push(`<div class="group">Fix all will handle · ${auto.length}</div>`);
+    parts.push(auto.length ? auto.map((x) => findingHtml(x)).join('') : '<div class="hint">Nothing automatic to do.</div>');
+    parts.push(`<div class="group">Needs a human · ${manual.length}</div>`);
+    parts.push(manual.length ? manual.map((x) => findingHtml(x)).join('') : '<div class="hint">Nothing.</div>');
+    if (f.ai) {
+      parts.push(`<div class="group">AI policy review · ${f.ai.length} (advisory)</div>`);
+      parts.push(f.ai.length ? f.ai.map((x) => findingHtml(x)).join('') : '<div class="hint">The model raised nothing.</div>');
+    }
+  }
+  $('detail').innerHTML = parts.join('');
+  const b = $('btnDlSel');
+  if (b) b.addEventListener('click', () => downloadOne(f));
+}
+
+/* ---------- preview ----------
+   Written straight into the iframe, not loaded from a blob: URL — playable
+   wrappers resolve assets with `new URL(path, base)` and a blob: base throws.
+   exitapi.js is swapped for a stub that reports the click back to this page. */
+const EXIT_STUB = '<script>window.ExitApi={exit:function(){try{parent.postMessage({rp:"exit"},"*")}catch(e){}}};window.addEventListener("error",function(e){try{parent.postMessage({rp:"err",msg:(e&&e.message)||String(e),line:e&&e.lineno,col:e&&e.colno},"*")}catch(er){}});<\/script>';
+function previewHtml(f) {
+  let html = S.fixed && f.fixedHtml ? f.fixedHtml : f.html;
+  if (/<script[^>]+exitapi\.js[^>]*>\s*<\/script>/i.test(html)) html = html.replace(/<script[^>]+exitapi\.js[^>]*>\s*<\/script>/i, EXIT_STUB);
+  else html = html.replace(/<head[^>]*>/i, (m) => m + EXIT_STUB);
+  return html;
+}
+function deviceSize(f) {
+  const html = S.fixed && f.fixedHtml ? f.fixedHtml : f.html;
+  const m = /<meta[^>]+name=["']?ad\.orientation["']?[^>]*content=["']?([^"'>]+)/i.exec(html);
+  const first = m ? m[1].trim().split(',')[0].trim().toLowerCase() : ($('orient').value === 'landscape' ? 'landscape' : 'portrait');
+  return first === 'landscape' ? [640, 360] : [360, 640];
+}
+function renderPreview() {
+  const f = S.files[S.sel];
+  if (!f) return;
+  const [w, h] = deviceSize(f);
+  const dev = $('device'), wrap = $('deviceWrap');
+  dev.style.width = w + 12 + 'px'; dev.style.height = h + 12 + 'px';
+  const k = Math.min(1, (wrap.clientWidth - 8) / (w + 12));
+  dev.style.transform = `scale(${k})`;
+  wrap.style.height = Math.ceil((h + 12) * k) + 'px';
+  // A fresh iframe has a synchronous about:blank document, so writing into it
+  // needs no load event — and no load event means no race between two previews.
+  const old = $('frame');
+  const fr = document.createElement('iframe');
+  fr.id = 'frame'; fr.title = 'playable preview'; fr.scrolling = 'no';
+  fr.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-pointer-lock');
+  old.replaceWith(fr);
+  const d = fr.contentDocument;
+  d.open(); d.write(previewHtml(f)); d.close();
+}
+window.addEventListener('message', (e) => {
+  if (e.data && e.data.rp === 'exit') {
+    $('toast').classList.add('show');
+    setTimeout(() => $('toast').classList.remove('show'), 2200);
+    log('preview: ExitApi.exit() fired — store click registered', 's');
+  }
+  if (e.data && e.data.rp === 'err') {
+    log(`preview script error: ${e.data.msg}${e.data.line ? ' (line ' + e.data.line + ')' : ''}`, 'e');
+  }
+});
+$('btnReplay').addEventListener('click', renderPreview);
+window.addEventListener('resize', () => { if (S.sel > -1) renderPreview(); });
+
+/* ---------- download ----------
+   Inside the claude.ai viewer a page cannot start a download itself; it asks
+   the host to offer the file. Anywhere else, a plain download link. */
+let hostDl;
+async function hostDownloads() {
+  if (hostDl !== undefined) return hostDl;
+  hostDl = null;
+  try { if (window.claude && typeof window.claude.use === 'function') hostDl = await window.claude.use('downloads'); } catch { hostDl = null; }
+  return hostDl;
+}
+async function save(bytes, name) {
+  const cap = await hostDownloads();
+  if (cap) {
+    try { await cap.save({ filename: name, data: new Blob([bytes], { type: 'application/zip' }) }); return true; }
+    catch (err) {
+      const code = err && err.code;
+      log(`${name}: ${code === 'declined' ? 'save declined' : (err && (err.message || code)) || 'save failed'}`, 'w');
+      return false;
+    }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' }));
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  return true;
+}
+async function downloadOne(f) {
+  if (!f.out) return log(`${f.name}: press Fix all first`, 'w');
+  if (await save(f.out.zip, f.out.name)) log(`${f.out.name}: ${MBs(f.out.zip.length)}`, 's');
+}
+$('btnDlAll').addEventListener('click', async () => {
+  if (!S.fixed) await fixEverything();
+  const files = S.files.filter((f) => f.out).map((f) => ({ name: f.out.name, bytes: f.out.zip }));
+  files.push({ name: 'readiness-report.csv', bytes: new TextEncoder().encode(reportCsv()) });
+  const bundle = await writeZip(files);
+  if (await save(bundle, 'playables_google.zip')) log(`bundle: ${files.length - 1} playable(s) + report · ${MBs(bundle.length)}`, 's');
+});
+function reportCsv() {
+  const q = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
+  const rows = [['file', 'source network', 'readiness before', 'readiness after', 'blockers left', 'warnings left', 'fixed automatically', 'needs a human', 'ai concerns']];
+  for (const f of S.files) {
+    const a = f.after;
+    rows.push([f.name, f.network, f.before.score.pct + '%', a ? a.score.pct + '%' : '', a ? a.score.counts.blocker : '', a ? a.score.counts.warn : '',
+      f.applied.join('; '), (a ? a.findings : f.before.findings.filter((x) => !x.fix)).map((x) => x.title).join('; '),
+      f.ai ? f.ai.map((x) => `${x.severity}: ${x.title}`).join('; ') : '']);
+  }
+  return rows.map((r) => r.map(q).join(',')).join('\r\n');
+}
+
+/* ---------- optional AI review ----------
+   Provider-neutral: the key and model are remembered per service, in this
+   browser only. Nothing is sent until a review button is pressed. */
+const prov = $('provider');
+prov.innerHTML = Object.entries(PROVIDERS).map(([id, p]) => `<option value="${id}">${esc(p.label)}</option>`).join('');
+prov.value = store.get('rp_provider') || DEFAULT_PROVIDER;
+if (!PROVIDERS[prov.value]) prov.value = DEFAULT_PROVIDER;
+function currentModel() { return $('modelCustom').value.trim() || $('model').value; }
+/**
+ * A text-only model gets the copy alone; the checkbox says so rather than
+ * failing later. The operator's own preference is held separately, so passing
+ * through a text-only model does not silently switch images off for good.
+ */
+let wantsImages = store.get('rp_send_images') !== '0';
+function syncVision() {
+  const blind = !supportsVision(prov.value, currentModel());
+  const box = $('sendImages');
+  box.disabled = blind;
+  box.checked = blind ? false : wantsImages;
+  $('sendImagesNote').textContent = blind
+    ? 'That model id reads text only, so the art would not be checked — pick another'
+    : 'Send the contact sheet so the model can judge the art';
+}
+$('sendImages').addEventListener('change', (e) => {
+  if (e.target.disabled) return;
+  wantsImages = e.target.checked;
+  store.set('rp_send_images', wantsImages ? '1' : '0');
+});
+function syncProvider() {
+  const id = prov.value, p = PROVIDERS[id];
+  store.set('rp_provider', id);
+  $('model').innerHTML = p.models.map((m) => `<option value="${m.id}">${esc(m.label)}</option>`).join('') || '<option value="">— type the model id below —</option>';
+  $('model').value = store.get('rp_model_' + id) || p.defaultModel;
+  $('modelCustom').value = store.get('rp_model_custom_' + id) || '';
+  $('apiKey').value = store.get('rp_key_' + id) || (id === 'gemini' ? store.get('rp_key') : '') || '';
+  $('apiKey').placeholder = p.keyHint;
+  // Preset endpoints stay editable: several services have separate China and international hosts.
+  $('endpointRow').style.display = (p.needsEndpoint || p.endpoint) ? '' : 'none';
+  $('endpoint').value = store.get('rp_endpoint_' + id) || p.endpoint || '';
+  $('endpointNote').textContent = p.endpointNote || '';
+  syncVision();
+  render();
+}
+prov.addEventListener('change', syncProvider);
+$('apiKey').addEventListener('input', () => {
+  const key = $('apiKey').value.trim();
+  // Google, Anthropic and Zhipu keys identify themselves, so pasting one is
+  // enough. A bare sk-… belongs to several services and cannot be told apart.
+  const guess = detectProvider(key);
+  if (guess && guess !== prov.value) {
+    prov.value = guess;
+    store.set('rp_key_' + guess, key);
+    syncProvider();
+    log(`AI service set to ${PROVIDERS[guess].label} from the key you pasted`);
+    return;
+  }
+  store.set('rp_key_' + prov.value, key);
+  render();
+});
+$('model').addEventListener('change', () => { store.set('rp_model_' + prov.value, $('model').value); syncVision(); });
+$('modelCustom').addEventListener('input', () => { store.set('rp_model_custom_' + prov.value, $('modelCustom').value.trim()); syncVision(); });
+$('endpoint').addEventListener('input', () => store.set('rp_endpoint_' + prov.value, $('endpoint').value.trim()));
+syncProvider();
+
+async function aiReview(f) {
+  const provider = prov.value;
+  const key = $('apiKey').value.trim();
+  if (!key) throw new Error('paste an API key first');
+  const model = currentModel();
+  const html = S.fixed && f.fixedHtml ? f.fixedHtml : f.html;
+  const src = S.fixed && f.after ? f.after : f.before;
+  const wantImages = $('sendImages').checked && supportsVision(provider, model);
+  let sheet = null;
+  if (wantImages) {
+    log(`${f.name}: building contact sheet…`);
+    sheet = await contactSheet(html);
+    if (sheet && S.files[S.sel] === f) { $('sheet').src = sheet.dataUrl; $('sheetBox').style.display = ''; }
+  }
+  log(`${f.name}: asking ${PROVIDERS[provider].label} · ${model} (${src.text.length} strings, ${sheet ? sheet.count : 0} images)…`);
+  const r = await review({
+    provider, key, model, endpoint: $('endpoint').value.trim(), sendImages: wantImages,
+    texts: src.text, sheetB64: sheet ? sheet.b64 : null, imageCount: sheet ? sheet.count : 0,
+    network: f.network,
+  });
+  f.ai = r.findings;
+  log(`${f.name}: AI review — ${r.findings.length} concern(s) · ${r.usage.in} in / ${r.usage.out} out tokens${r.sawImages ? '' : ' · copy only'}`, r.findings.some((x) => x.severity === 'blocker') ? 'w' : 's');
+}
+$('btnAiOne').addEventListener('click', async () => {
+  const f = S.files[S.sel]; if (!f) return;
+  $('btnAiOne').disabled = true;
+  try { await aiReview(f); } catch (err) { log(`AI review failed: ${err.message}`, 'e'); }
+  $('btnAiOne').disabled = false; render(); renderDetail();
+});
+$('btnAiAll').addEventListener('click', async () => {
+  $('btnAiAll').disabled = true;
+  for (const f of S.files) { try { await aiReview(f); } catch (err) { log(`${f.name}: AI review failed: ${err.message}`, 'e'); } }
+  $('btnAiAll').disabled = false; render(); renderDetail();
+});
+
+/* ---------- policy review explainer ----------
+   The detail that used to sit in a paragraph nobody read. Kept out of the way
+   until asked for, because the operator only needs it once. */
+const policyDlg = $('policyInfo');
+$('piProvenance').textContent =
+  `Policy text captured from ${POLICY_SOURCE.url} on ${POLICY_SOURCE.captured}. That page is Google's overview; `
+  + 'each policy links to a detail page not included here, so a finding resting on one of those is marked unsourced.';
+const openPolicy = () => { try { policyDlg.showModal(); } catch { policyDlg.setAttribute('open', ''); } };
+const closePolicy = () => { try { policyDlg.close(); } catch { policyDlg.removeAttribute('open'); } };
+for (const id of ['btnPolicyInfo', 'btnPolicyInfo2']) $(id).addEventListener('click', openPolicy);
+for (const id of ['btnPolicyClose', 'btnPolicyClose2']) $(id).addEventListener('click', closePolicy);
+// Clicking the backdrop dismisses it, the way a modal is expected to behave.
+policyDlg.addEventListener('click', (e) => { if (e.target === policyDlg) closePolicy(); });
+
+render();
+log('ready — drop .html or .zip playables');
+</script>
+</body>
+</html>

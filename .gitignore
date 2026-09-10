@@ -1,0 +1,14 @@
+node_modules/
+*.log
+*.tmp
+
+# Playables under test. Drop a real .zip in fixtures/ to exercise the full
+# pipeline locally; a vendor's creative is not ours to redistribute.
+fixtures/
+
+# Build output, except the committed single-file build people download.
+dist/*
+!dist/re-playable.html
+
+# Machine-local Claude Code permission grants
+.claude/settings.local.json
