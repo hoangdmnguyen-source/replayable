@@ -1,38 +1,10 @@
-# Re-Playable
 
-**Takes a playable ad you already have and turns it into one Google Ads will accept.**
-
-Playables are usually built for AppLovin, ironSource, Meta or Mintegral. Google Ads wants something
-different: its own exit call, its own script tag, no browser storage, no self-navigation, sound that
-waits for a tap. Re-Playable finds those differences, fixes the ones that can be fixed
-mechanically, and tells you plainly about the ones that need a person.
-
-It runs entirely in your browser. Nothing is uploaded, and it works with the network unplugged.
-
----
-
-## Use it
+## Demo
 
 1. Download **[`dist/re-playable.html`](dist/re-playable.html)** — one file, nothing to install.
-2. Double-click it. It opens in your browser.
-3. Drag your playables onto the page. One or a hundred.
-4. Press **Fix all**, then **Download all**.
+2. Drag your playables onto the page. One or a hundred.
+3. Press **Fix all**, then **Download all**.
 
-You get one Google-ready `.zip` per playable, plus a CSV report of what changed in each.
-
----
-
-## What you see
-
-| | |
-|---|---|
-| **A readiness score** | Out of 100, per file, before and after fixing. Computed from the file itself, so it is the same every time. |
-| **Every finding, explained** | Split into what the tool fixes for you and what needs your judgement. Each one says what it found and why it matters. |
-| **A live preview** | The converted ad in a phone frame. Tap the button and a badge confirms the click reached Google's exit call, which is the only click Google counts. |
-
----
-
-## What it fixes for you
 
 | Problem | Fix |
 |---|---|
@@ -53,18 +25,6 @@ An AppLovin playable waits for AppLovin's SDK before it starts. On Google that S
 so the ad sits on a black screen forever — and passes every file check, because the file is
 perfectly valid. The stand-in answers that wait immediately. It is the single most valuable thing
 the converter does, and it is invisible unless you know to look for it.
-
----
-
-## What it hands back to you
-
-Some things a tool should not decide. These are reported, never silently changed:
-
-- Over 5 MB once compressed
-- Text-entry fields, which Google treats as collecting personal data
-- Copy that reads as misleading, urgent, or as an imitation of a system message
-- An SDK that cannot be stood in for
-- Artwork carrying words the automatic checks cannot read
 
 ---
 
