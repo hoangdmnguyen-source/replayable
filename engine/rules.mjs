@@ -339,6 +339,33 @@ export const POLICY_TEXT_RULES = [
 /** CTA copy we recognise; absence is only advice, because the CTA is often art. */
 export const CTA_RE = /\b(install(?: now| free| today)?|download(?: now| free| today)?|play (?:now|free|for free|today|here)|get (?:it|the app|the game|started|now|free|it now)|try (?:it|now|free|for free|today)|start (?:now|free|for free|today|here|learning|playing|trial)|join (?:now|free|for free|today|us)|open (?:app|now)|continue|sign up|claim (?:now|free|reward)|free trial)\b/i;
 
+/**
+ * What to look for in the artwork.
+ *
+ * Every check above reads text. A playable that renders its words into a PNG —
+ * which most do — defeats all of them at once: the regex has nothing to match,
+ * so a creative can draw "PHONE STORAGE FULL?" over a fake iOS storage panel
+ * and pass every copy rule in this file.
+ *
+ * The AI pass is the only one that can see those pixels, and it will not go
+ * looking unprompted: it is told to judge strictly against the captured policy
+ * text, and the sub-policies this catches — Misleading ad design, Clickbait —
+ * live on detail pages that were not captured. Left to itself it therefore
+ * stays quiet about exactly the category it is best placed to catch.
+ *
+ * So the model is handed this list explicitly. None of it is in the captured
+ * text, so a finding raised from it is reported unsourced, the same as any
+ * other rule resting on a page we do not hold.
+ */
+export const ART_CHECKS = [
+  'Imitation of system or device UI: a storage panel, settings screen, notification, permission prompt, battery or virus warning, update dialog, or anything else drawn to look like the phone speaking rather than the ad.',
+  'A close, skip or X control drawn into the artwork. If it does not close the ad it is a named disapproval, and a reviewer cannot tell that it does not from a still.',
+  'Gameplay the ad does not deliver: art depicting a game, mechanic or difficulty that the playable itself never shows.',
+  'Borrowed identity: another company\'s logo, icon, app screenshot, or a store badge that is not the official unmodified asset.',
+  'Drawn copy that would fail a copy rule if it were text — manufactured urgency, cash or reward promises, unverifiable superlatives, shouting punctuation, adult or gambling imagery.',
+  'A progress bar, timer, loading state or reward counter that is decorative rather than real.',
+];
+
 /** Marker ids the converter stamps into the document so the audit can see what has been done. */
 export const MARKERS = {
   shim: 'rp-google-shim',

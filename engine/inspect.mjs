@@ -191,8 +191,12 @@ export function extractText(html, { max = 5000 } = {}) {
     out.push({ text: t, where });
   };
 
-  // Markup: strip code and style, then read text nodes and labelling attributes.
-  const markup = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+  // Markup: strip code, style and the head, then read text nodes and labelling
+  // attributes. The head is dropped because nothing in it reaches the screen:
+  // <title> is a filename more often than copy ("PLA 1", "index_4_google"), and
+  // judging an ad on its filename produces findings no reviewer would ever make.
+  const markup = html.replace(/<head\b[^>]*>[\s\S]*?<\/head>/i, ' ')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
     .replace(/<!--[\s\S]*?-->/g, ' ');
   for (const m of markup.matchAll(/\b(?:alt|title|aria-label|placeholder|value)\s*=\s*["']([^"']{2,160})["']/gi)) push(m[1], 'markup');

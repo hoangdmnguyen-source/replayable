@@ -23,7 +23,7 @@ import { fixAll, applyFixes, shimParts, sanitizeName, reroot, pickEntry, inlineS
 import { score } from './score.mjs';
 import { readZip, writeZip } from './zip.mjs';
 import { buildPrompt, normalizeFindings, review, reviewAll, mergeFindings, parseJsonLoose, supportsVision, detectProvider, PROVIDERS, POLICY_TEXT, POLICY_SOURCE, networkFailureHelp } from './aiscan.mjs';
-import { POLICY_TEXT_RULES, GOOGLE_ADS_LIMITS, EXITAPI_SRC, CTA_RE, PROHIBITED, NETWORKS, SOURCE_REFS, SOURCE_FAMILIES, CHECK_SOURCES, sourceFor } from './rules.mjs';
+import { POLICY_TEXT_RULES, GOOGLE_ADS_LIMITS, EXITAPI_SRC, CTA_RE, ART_CHECKS, PROHIBITED, NETWORKS, SOURCE_REFS, SOURCE_FAMILIES, CHECK_SOURCES, sourceFor } from './rules.mjs';
 
 let passed = 0, failed = 0;
 function ok(cond, msg) {
@@ -46,6 +46,7 @@ const APPLOVIN = `<html>
 <style>body{margin:0;background:#123}</style>
 </head>
 <body>
+<div class="banner">Mahjong Cash!!!</div>
 <div id="cta" class="btn">INSTALL NOW</div>
 <div class="close-btn">×</div>
 <audio id="bgm" src="data:audio/mpeg;base64,AAAA" autoplay loop></audio>
@@ -559,6 +560,42 @@ console.log('batched review (every image, none dropped)');
   eq(r.passes, 1, 'as a single pass');
 }
 
+console.log('copy a player never sees, and art the copy rules cannot reach');
+{
+  // A <title> is a filename far more often than copy. Judging an ad on it
+  // produced findings like "PLA 1 is generic placeholder text" — nonsense to a
+  // reviewer, who never sees it.
+  const doc = `<!DOCTYPE html><html><head><title>PLA 1</title>
+<meta name="description" content="internal build note"></head>
+<body><div>Tap to clean</div></body></html>`;
+  const t = extractText(doc);
+  ok(!t.some((x) => x.text === 'PLA 1'), 'the document title is not treated as visible copy');
+  ok(!t.some((x) => /internal build note/.test(x.text)), 'head metadata is not treated as visible copy');
+  ok(t.some((x) => x.text === 'Tap to clean'), 'body copy is still read');
+  // An alt attribute in the body is a label a screen reader speaks: still copy.
+  ok(extractText('<body><img alt="Clean up now"></body>').some((x) => x.text === 'Clean up now'),
+    'labelling attributes in the body are still read');
+
+  // The copy rules read text. A creative that draws its words into a PNG slips
+  // every one of them, which is why the model is handed an explicit art list.
+  const spelled = '<!DOCTYPE html><html><head><title>x</title></head><body><div>PHONE STORAGE FULL?</div></body></html>';
+  const drawn = '<!DOCTYPE html><html><head><title>x</title></head><body><img src="data:image/png;base64,AAAA"></body></html>';
+  ok(has(audit(spelled, {}).findings, 'copy-fake-system-ui'), 'system-UI copy is caught when it is text');
+  ok(!has(audit(drawn, {}).findings, 'copy-fake-system-ui'), 'and cannot be caught when it is drawn — hence the art pass');
+
+  const withArt = buildPrompt({ texts: [], imageCount: 8 });
+  ok(withArt.includes('rule 1 does not restrain it'), 'the art rules are exempted from the copy-only restraint');
+  ok(/system or device UI/i.test(withArt), 'the art checklist names system-UI imitation');
+  ok(/close, skip or X control/i.test(withArt), 'the art checklist names drawn close buttons');
+  ok(/not only each tile alone/.test(withArt), 'the model is told to judge the composed screen, not just tiles');
+  ok(/"PLA 1"/.test(withArt), 'the prompt tells the model filenames are not copy');
+  for (const c of ART_CHECKS) ok(withArt.includes(c), `art check carried into the prompt: ${c.slice(0, 40)}…`);
+
+  const noArt = buildPrompt({ texts: [], imageCount: 0 });
+  ok(!/system or device UI/i.test(noArt), 'a copy-only review is not given the art checklist');
+  ok(/"PLA 1"/.test(noArt), 'but is still told to ignore filenames');
+}
+
 console.log('unsupported SDKs alongside a Google path');
 {
   // A universal bundle whose exit table tries Google first: the Mintegral
@@ -655,7 +692,12 @@ console.log('policy source (Google\'s own words)');
   // The prompt hands over the source text and demands a verbatim quote.
   const prompt = buildPrompt({ texts: extractText(APPLOVIN), appName: 'X', imageCount: 2 });
   ok(prompt.includes(POLICY_TEXT), 'prompt carries the captured page verbatim');
-  ok(/Judge ONLY against the policy text above/.test(prompt), 'prompt forbids outside rules');
+  ok(/Judge the copy ONLY against the policy text above/.test(prompt), 'prompt forbids outside rules for copy');
+  // The restraint is deliberately narrower than it was: it binds the copy, not
+  // the art. Drawn violations are unsourceable by nature, and a blanket ban on
+  // outside knowledge silenced the pass that exists to catch them.
+  ok(/rule 1 does not restrain it/.test(prompt), 'prompt exempts the art from that restraint');
+  ok(/"sourced" false/.test(prompt), 'and requires art findings be reported unsourced');
   ok(/"sourced"/.test(prompt) && /"quote"/.test(prompt), 'prompt asks for sourced + quote');
 
   // A model quoting Google truthfully keeps its claim…

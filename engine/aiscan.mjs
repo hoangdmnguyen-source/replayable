@@ -18,6 +18,7 @@
  */
 
 import { inventoryImages } from './inspect.mjs';
+import { ART_CHECKS } from './rules.mjs';
 import { POLICY_TEXT, POLICY_SOURCE } from './policy-rubric.mjs';
 
 export { POLICY_SOURCE };
@@ -184,8 +185,8 @@ ${POLICY_TEXT}
 === END GOOGLE ADS POLICIES ===
 
 RULES FOR THIS REVIEW — follow them exactly:
-1. Judge ONLY against the policy text above. Do not apply rules you remember from
-   elsewhere, and do not infer rules the text does not state.
+1. Judge the copy ONLY against the policy text above. Do not apply copy rules you
+   remember from elsewhere, and do not infer rules the text does not state.
 2. That text is Google's OVERVIEW page. Each policy has its own detail page which
    is NOT included. So you do not have the detailed rules for any sub-policy. If a
    concern would depend on a detail page you have not been given, you may still
@@ -194,6 +195,17 @@ RULES FOR THIS REVIEW — follow them exactly:
    put the exact sentence or example you are relying on in "quote", copied verbatim.
 4. Report only what you can point at in this creative. Do not invent. If nothing in
    the creative conflicts with the policy text, return an empty list.
+5. Judge the copy on what a player SEES. Ignore anything that is plainly a filename,
+   an asset path, a build id or developer shorthand rather than words written for a
+   user. A string like "PLA 1" or "scene_02" is not ad copy and is not a finding.
+${imageCount ? `6. The artwork is judged differently, and rule 1 does not restrain it. Most playables
+   draw their words into images, so the copy rules cannot reach them. Examine the
+   sheet for each of the following and report what you find, with "sourced" false
+   since none of it is stated in the text above:
+${ART_CHECKS.map((c, i) => `   ${String.fromCharCode(97 + i)}. ${c}`).join('\n')}
+   Judge the screen these images compose, not only each tile alone: a panel, a bar
+   and a row of labels may be innocuous separately and a fake settings screen
+   together. Where a still cannot settle it, say so and raise it as "advice".` : ''}
 
 You are given (1) every visible text string found in the creative and (2) ${art}.
 

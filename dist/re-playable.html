@@ -112,7 +112,7 @@ details summary{cursor:pointer;color:var(--dim);font-size:12px;user-select:none}
 @media(max-width:700px){.aiRow{grid-template-columns:1fr}}
 .aiRow label{display:block;font-size:11px;color:var(--dim);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
 .aiRow input,.aiRow select{width:100%}
-#sheet{max-width:100%;border-radius:8px;border:1px solid var(--line);margin-top:8px}
+#sheets img{max-width:100%;border-radius:8px;border:1px solid var(--line);display:block}
 
 button.linkish{background:none;border:0;padding:0;color:var(--accent2);cursor:pointer;font:inherit;text-decoration:underline}
 dialog#policyInfo{border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--tx);
@@ -614,6 +614,33 @@ const POLICY_TEXT_RULES = [
 /** CTA copy we recognise; absence is only advice, because the CTA is often art. */
 const CTA_RE = /\b(install(?: now| free| today)?|download(?: now| free| today)?|play (?:now|free|for free|today|here)|get (?:it|the app|the game|started|now|free|it now)|try (?:it|now|free|for free|today)|start (?:now|free|for free|today|here|learning|playing|trial)|join (?:now|free|for free|today|us)|open (?:app|now)|continue|sign up|claim (?:now|free|reward)|free trial)\b/i;
 
+/**
+ * What to look for in the artwork.
+ *
+ * Every check above reads text. A playable that renders its words into a PNG —
+ * which most do — defeats all of them at once: the regex has nothing to match,
+ * so a creative can draw "PHONE STORAGE FULL?" over a fake iOS storage panel
+ * and pass every copy rule in this file.
+ *
+ * The AI pass is the only one that can see those pixels, and it will not go
+ * looking unprompted: it is told to judge strictly against the captured policy
+ * text, and the sub-policies this catches — Misleading ad design, Clickbait —
+ * live on detail pages that were not captured. Left to itself it therefore
+ * stays quiet about exactly the category it is best placed to catch.
+ *
+ * So the model is handed this list explicitly. None of it is in the captured
+ * text, so a finding raised from it is reported unsourced, the same as any
+ * other rule resting on a page we do not hold.
+ */
+const ART_CHECKS = [
+  'Imitation of system or device UI: a storage panel, settings screen, notification, permission prompt, battery or virus warning, update dialog, or anything else drawn to look like the phone speaking rather than the ad.',
+  'A close, skip or X control drawn into the artwork. If it does not close the ad it is a named disapproval, and a reviewer cannot tell that it does not from a still.',
+  'Gameplay the ad does not deliver: art depicting a game, mechanic or difficulty that the playable itself never shows.',
+  'Borrowed identity: another company\'s logo, icon, app screenshot, or a store badge that is not the official unmodified asset.',
+  'Drawn copy that would fail a copy rule if it were text — manufactured urgency, cash or reward promises, unverifiable superlatives, shouting punctuation, adult or gambling imagery.',
+  'A progress bar, timer, loading state or reward counter that is decorative rather than real.',
+];
+
 /** Marker ids the converter stamps into the document so the audit can see what has been done. */
 const MARKERS = {
   shim: 'rp-google-shim',
@@ -646,7 +673,7 @@ function sourceFor(id) {
   return null;
 }
 
-return { sourceFor, GOOGLE_ADS_LIMITS, EXITAPI_SRC, ALLOWED_HOSTS, PROHIBITED, NETWORKS, CUSTOM_EXITS, SUSPECT_NAV, STORAGE_RE, DIALOG_RE, ENABLER_CALL_RE, AUTOPLAY_RE, SAFE_NAME_RE, SOURCE_REFS, SOURCE_FAMILIES, CHECK_SOURCES, POLICY_TEXT_RULES, CTA_RE, MARKERS };
+return { sourceFor, GOOGLE_ADS_LIMITS, EXITAPI_SRC, ALLOWED_HOSTS, PROHIBITED, NETWORKS, CUSTOM_EXITS, SUSPECT_NAV, STORAGE_RE, DIALOG_RE, ENABLER_CALL_RE, AUTOPLAY_RE, SAFE_NAME_RE, SOURCE_REFS, SOURCE_FAMILIES, CHECK_SOURCES, POLICY_TEXT_RULES, CTA_RE, ART_CHECKS, MARKERS };
 })();
 
 /* ---- engine/inspect.mjs ---- */
@@ -844,8 +871,12 @@ function extractText(html, { max = 5000 } = {}) {
     out.push({ text: t, where });
   };
 
-  // Markup: strip code and style, then read text nodes and labelling attributes.
-  const markup = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+  // Markup: strip code, style and the head, then read text nodes and labelling
+  // attributes. The head is dropped because nothing in it reaches the screen:
+  // <title> is a filename more often than copy ("PLA 1", "index_4_google"), and
+  // judging an ad on its filename produces findings no reviewer would ever make.
+  const markup = html.replace(/<head\b[^>]*>[\s\S]*?<\/head>/i, ' ')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
     .replace(/<!--[\s\S]*?-->/g, ' ');
   for (const m of markup.matchAll(/\b(?:alt|title|aria-label|placeholder|value)\s*=\s*["']([^"']{2,160})["']/gi)) push(m[1], 'markup');
@@ -2323,6 +2354,7 @@ __rp['aiscan'] = (() => {
  */
 
 const { inventoryImages } = __rp['inspect'];
+const { ART_CHECKS } = __rp['rules'];
 const { POLICY_TEXT, POLICY_SOURCE } = __rp['policy-rubric'];
 
 
@@ -2489,8 +2521,8 @@ ${POLICY_TEXT}
 === END GOOGLE ADS POLICIES ===
 
 RULES FOR THIS REVIEW — follow them exactly:
-1. Judge ONLY against the policy text above. Do not apply rules you remember from
-   elsewhere, and do not infer rules the text does not state.
+1. Judge the copy ONLY against the policy text above. Do not apply copy rules you
+   remember from elsewhere, and do not infer rules the text does not state.
 2. That text is Google's OVERVIEW page. Each policy has its own detail page which
    is NOT included. So you do not have the detailed rules for any sub-policy. If a
    concern would depend on a detail page you have not been given, you may still
@@ -2499,6 +2531,17 @@ RULES FOR THIS REVIEW — follow them exactly:
    put the exact sentence or example you are relying on in "quote", copied verbatim.
 4. Report only what you can point at in this creative. Do not invent. If nothing in
    the creative conflicts with the policy text, return an empty list.
+5. Judge the copy on what a player SEES. Ignore anything that is plainly a filename,
+   an asset path, a build id or developer shorthand rather than words written for a
+   user. A string like "PLA 1" or "scene_02" is not ad copy and is not a finding.
+${imageCount ? `6. The artwork is judged differently, and rule 1 does not restrain it. Most playables
+   draw their words into images, so the copy rules cannot reach them. Examine the
+   sheet for each of the following and report what you find, with "sourced" false
+   since none of it is stated in the text above:
+${ART_CHECKS.map((c, i) => `   ${String.fromCharCode(97 + i)}. ${c}`).join('\n')}
+   Judge the screen these images compose, not only each tile alone: a panel, a bar
+   and a row of labels may be innocuous separately and a fake settings screen
+   together. Where a still cannot settle it, say so and raise it as "advice".` : ''}
 
 You are given (1) every visible text string found in the creative and (2) ${art}.
 
