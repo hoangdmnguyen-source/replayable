@@ -22,7 +22,7 @@ import { audit } from './audit.mjs';
 import { fixAll, applyFixes, shimParts, sanitizeName, reroot, pickEntry, inlineScripts, parseError, stripShim, canParse } from './convert.mjs';
 import { score } from './score.mjs';
 import { readZip, writeZip } from './zip.mjs';
-import { buildPrompt, normalizeFindings, review, parseJsonLoose, supportsVision, detectProvider, PROVIDERS, POLICY_TEXT, POLICY_SOURCE, networkFailureHelp } from './aiscan.mjs';
+import { buildPrompt, normalizeFindings, review, reviewAll, mergeFindings, parseJsonLoose, supportsVision, detectProvider, PROVIDERS, POLICY_TEXT, POLICY_SOURCE, networkFailureHelp } from './aiscan.mjs';
 import { POLICY_TEXT_RULES, GOOGLE_ADS_LIMITS, EXITAPI_SRC, CTA_RE, PROHIBITED, NETWORKS, SOURCE_REFS, SOURCE_FAMILIES, CHECK_SOURCES, sourceFor } from './rules.mjs';
 
 let passed = 0, failed = 0;
@@ -456,6 +456,107 @@ console.log('ai review (offline, every provider)');
   threw = null;
   try { await review({ provider: 'nope', key: 'K', model: 'x', texts }); } catch (e) { threw = e; }
   ok(threw && /Unknown provider/.test(threw.message), 'unknown provider rejected');
+}
+
+console.log('batched review (every image, none dropped)');
+{
+  const texts = extractText(APPLOVIN);
+
+  // Numbering is global, so evidence survives the merge back into one list.
+  const p2 = buildPrompt({ texts, imageCount: 42, imageFrom: 43, batch: { index: 2, total: 3, totalImages: 120 } });
+  ok(p2.includes('numbered 43 to 84'), 'batch prompt states its own image range');
+  ok(p2.includes('pass 2 of 3'), 'batch prompt says which pass it is');
+  ok(p2.includes('120 images in all'), 'batch prompt states the creative total');
+  ok(!buildPrompt({ texts, imageCount: 5 }).includes('pass 1 of'), 'a single-pass review is not told about batching');
+
+  // The copy budget counts characters, and says so when it bites.
+  const many = Array.from({ length: 500 }, (_, i) => ({ text: `Label number ${i}`, where: 'markup' }));
+  const tight = buildPrompt({ texts: many, textBudget: 400 });
+  ok(/and \d+ more, omitted/.test(tight), 'a trimmed prompt admits what it left out');
+  ok(!buildPrompt({ texts: many }).includes('omitted'), '500 strings fit the real budget untrimmed');
+
+  // Merging: the same copy concern from every pass collapses to one; the same
+  // concern about different images does not.
+  const mk = (title, evidence, sourced = false) => ({ area: 'Editorial', title, measured: evidence, sourced, severity: 'warn' });
+  const merged = mergeFindings([
+    [mk('Shouting punctuation', 'string 3'), mk('Fake close button', 'image 2')],
+    [mk('Shouting punctuation', 'string 3'), mk('Fake close button', 'image 47')],
+  ]);
+  eq(merged.length, 3, 'duplicate copy findings collapse, distinct image findings do not');
+  eq(mergeFindings([[mk('X', 's1')], [mk('X', 's1', true)]])[0].sourced, true, 'the sourced copy of a duplicate wins');
+
+  const calls = [];
+  const fake = (reply) => async (url, init) => { calls.push({ url, init }); return { ok: true, json: async () => reply, text: async () => '' }; };
+  const reply = (findings) => ({ choices: [{ message: { content: JSON.stringify({ findings }) } }], usage: { prompt_tokens: 10, completion_tokens: 5 } });
+  const sheets = [
+    { b64: 'AAA', dataUrl: '', count: 42, from: 1 },
+    { b64: 'BBB', dataUrl: '', count: 42, from: 43 },
+    { b64: 'CCC', dataUrl: '', count: 16, from: 85 },
+  ];
+  const finding = (evidence) => ({ policy: 'Editorial', severity: 'warn', evidence, why: 'Fake dialog', suggestion: 'Remove it' });
+
+  calls.length = 0;
+  const seen = [];
+  let r = await reviewAll({
+    sheets, provider: 'openai', key: 'K', model: 'gpt-4o', texts,
+    onProgress: (p) => seen.push(`${p.index}/${p.total}`),
+    fetchImpl: fake(reply([finding('image 3')])),
+  });
+  eq(calls.length, 3, '100 images run as three passes');
+  eq(r.passes, 3, 'the pass count is reported');
+  eq(r.images, 100, 'every image is accounted for');
+  eq(seen.join(' '), '1/3 2/3 3/3', 'progress fires once per pass, in order');
+  eq(r.usage.in, 30, 'token usage is summed across passes');
+  eq(r.findings.length, 1, 'the identical finding from all three passes collapses to one');
+  eq(r.failed.length, 0, 'no pass failed');
+  const bodies = calls.map((c) => JSON.parse(c.init.body).messages[0].content);
+  eq(bodies.map((b) => b[1].image_url.url.split(',')[1]).join(','), 'AAA,BBB,CCC', 'each pass carries its own sheet');
+  ok(bodies[2][0].text.includes('numbered 85 to 100'), 'the last pass numbers its images 85-100');
+
+  // Distinct evidence per pass survives — three sheets, three real findings.
+  calls.length = 0;
+  let n = 0;
+  r = await reviewAll({
+    sheets, provider: 'openai', key: 'K', model: 'gpt-4o', texts,
+    fetchImpl: async (url, init) => { calls.push({ url, init }); n++; return { ok: true, json: async () => reply([finding(`image ${n * 10}`)]), text: async () => '' }; },
+  });
+  eq(r.findings.length, 3, 'findings about different images are all kept');
+
+  // One pass failing costs that pass, not the review.
+  calls.length = 0;
+  n = 0;
+  r = await reviewAll({
+    sheets, provider: 'openai', key: 'K', model: 'gpt-4o', texts,
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init }); n++;
+      if (n === 2) return { ok: false, status: 429, text: async () => 'rate limited' };
+      return { ok: true, json: async () => reply([finding(`image ${n}`)]), text: async () => '' };
+    },
+  });
+  eq(r.findings.length, 2, 'the surviving passes still report');
+  eq(r.failed.length, 1, 'the failed pass is recorded, not swallowed');
+  eq(r.failed[0].pass, 2, 'the failure names which pass');
+  eq(r.failed[0].images, '43–84', 'and which images went unreviewed');
+
+  // Every pass failing is a failure, not a clean bill of health.
+  let threw = null;
+  try {
+    await reviewAll({ sheets, provider: 'openai', key: 'K', model: 'gpt-4o', texts, fetchImpl: async () => ({ ok: false, status: 500, text: async () => 'down' }) });
+  } catch (e) { threw = e; }
+  ok(threw && /500/.test(threw.message), 'a review whose every pass failed throws');
+
+  // A text-only model gets one copy pass, whatever art the creative has.
+  calls.length = 0;
+  r = await reviewAll({ sheets, provider: 'compatible', key: 'K', model: 'qwen-plus', endpoint: 'https://x/v1', texts, fetchImpl: fake(reply([])) });
+  eq(calls.length, 1, 'a text-only model is called once');
+  eq(r.images, 0, 'and is credited with no images');
+  eq(r.sawImages, false, 'and says it saw none');
+
+  // No art at all: still one pass, so the copy is reviewed.
+  calls.length = 0;
+  r = await reviewAll({ sheets: [], provider: 'openai', key: 'K', model: 'gpt-4o', texts, fetchImpl: fake(reply([])) });
+  eq(calls.length, 1, 'a creative with no images still gets a copy review');
+  eq(r.passes, 1, 'as a single pass');
 }
 
 console.log('unsupported SDKs alongside a Google path');

@@ -209,7 +209,7 @@ dialog#policyInfo::backdrop{background:#000a;backdrop-filter:blur(2px)}
           <button class="ghost" id="btnAiOne" disabled>Review selected file</button>
           <button class="ghost" id="btnAiAll" disabled>Review all files</button>
         </div>
-        <details id="sheetBox" style="margin-top:8px;display:none"><summary>What the model saw</summary><img id="sheet" alt="contact sheet"></details>
+        <details id="sheetBox" style="margin-top:8px;display:none"><summary>What the model saw <span id="sheetCount" class="hint"></span></summary><div id="sheets"></div></details>
       </div>
     </div>
   </div>
@@ -826,8 +826,13 @@ function looksLikeCopy(s) {
  * Visible copy: markup text and attribute labels, plus string literals in
  * inline scripts that look like UI text. Each entry carries where it came
  * from so a finding can say "in a script string" vs "in the page".
+ *
+ * `max` is a runaway guard, not a review budget. It sits far above any real
+ * creative — a localisation table is the only thing that approaches it — so in
+ * practice every distinct string is returned. Strings are deduplicated
+ * case-insensitively, so the count is of distinct copy, not occurrences.
  */
-function extractText(html, { max = 600 } = {}) {
+function extractText(html, { max = 5000 } = {}) {
   const seen = new Set();
   const out = [];
   const push = (text, where) => {
@@ -874,15 +879,20 @@ const DATA_IMG_RE = /data:image\/(png|jpe?g|webp|gif);base64,([A-Za-z0-9+/=]{200
 /**
  * Every raster image inlined as a data: URI, largest first. Only offsets and
  * sizes — decoding is browser work and only the AI review needs pixels.
+ *
+ * Returns all of them by default. The review batches them across several
+ * contact sheets rather than discarding the tail, so the caller decides how
+ * many to draw, not this function.
  */
-function inventoryImages(html, { max = 40 } = {}) {
+function inventoryImages(html, { max = Infinity } = {}) {
   const out = [];
   let m;
   DATA_IMG_RE.lastIndex = 0;
   while ((m = DATA_IMG_RE.exec(html))) {
     out.push({ mime: `image/${m[1] === 'jpg' ? 'jpeg' : m[1]}`, start: m.index, length: m[0].length, bytes: Math.floor(m[2].length * 0.75) });
   }
-  return out.sort((a, b) => b.bytes - a.bytes).slice(0, max);
+  out.sort((a, b) => b.bytes - a.bytes);
+  return Number.isFinite(max) ? out.slice(0, max) : out;
 }
 
 return { offsets, detectNetworks, customExits, networkExits, markupOnly, localRefs, externalHosts, exitApiScript, inspect, extractText, inventoryImages };
@@ -2437,13 +2447,42 @@ function detectProvider(key) {
  */
 
 
-/** The one prompt every provider gets. Asks for a JSON object so strict JSON modes are happy. */
-function buildPrompt({ texts, appName = '', network = '', imageCount = 0 }) {
-  const copy = texts.slice(0, 400).map((t, i) => `${i + 1}. ${JSON.stringify(t.text)}${t.where === 'script' ? '  [script string]' : ''}`).join('\n');
+/**
+ * Guard on how much copy rides along in one prompt. Characters, not strings,
+ * because one 160-character line costs what eighty short labels do. Set high
+ * enough that no real creative is trimmed; it exists so a localisation table
+ * cannot silently blow the context window.
+ */
+const PROMPT_TEXT_BUDGET = 120_000;
+
+/**
+ * The one prompt every provider gets. Asks for a JSON object so strict JSON
+ * modes are happy.
+ *
+ * A creative with more art than fits one legible contact sheet is reviewed in
+ * several passes. `imageFrom` keeps the numbering continuous across them, so
+ * "image 47" means the 47th image of the creative and not the 5th of batch 2 —
+ * evidence stays meaningful once the findings are merged back together.
+ */
+function buildPrompt({ texts, appName = '', network = '', imageCount = 0, imageFrom = 1, batch = null, textBudget = PROMPT_TEXT_BUDGET }) {
+  const lines = [];
+  let spent = 0, shown = 0;
+  for (const t of texts) {
+    const line = `${shown + 1}. ${JSON.stringify(t.text)}${t.where === 'script' ? '  [script string]' : ''}`;
+    if (spent + line.length > textBudget) break;
+    lines.push(line); spent += line.length; shown++;
+  }
+  const trimmed = texts.length - shown;
+  const copy = lines.join('\n');
+  const last = imageFrom + imageCount - 1;
+  const art = imageCount
+    ? `one contact sheet with ${imageCount} of the creative's images, numbered ${imageFrom} to ${last}`
+    : 'no images (the creative has no raster art)';
   return `You are reviewing ONE HTML5 playable ad creative against Google's advertising policies, before it is uploaded to Google Ads.
 
 ${appName ? `The promoted app is: ${JSON.stringify(appName)}.` : 'The promoted app is not stated.'}
 ${network ? `The creative was originally built for: ${network}.` : ''}
+${batch ? `This is pass ${batch.index} of ${batch.total}. The creative has ${batch.totalImages} images in all, too many to stay legible on one sheet, so they are split across passes. Judge only the images on THIS sheet; the other passes cover the rest. Number them exactly as labelled — the passes are merged afterwards.` : ''}
 
 === BEGIN GOOGLE ADS POLICIES (captured ${POLICY_SOURCE.captured} from ${POLICY_SOURCE.url}) ===
 ${POLICY_TEXT}
@@ -2461,19 +2500,19 @@ RULES FOR THIS REVIEW — follow them exactly:
 4. Report only what you can point at in this creative. Do not invent. If nothing in
    the creative conflicts with the policy text, return an empty list.
 
-You are given (1) every visible text string found in the creative and (2) ${imageCount ? `one contact sheet with the creative's ${imageCount} largest images, numbered` : 'no images (the creative has no raster art)'}.
+You are given (1) every visible text string found in the creative and (2) ${art}.
 
 Respond with JSON only, in this exact shape: {"findings": [ ... ]} where each finding has:
 - "policy": the policy heading from the text above, copied as written, e.g. "Editorial" or "Data collection and use"
 - "sourced": true if the policy text above states this rule, false if you are relying on knowledge not present in it
 - "quote": the verbatim sentence from the policy text that supports this finding, or "" when sourced is false
 - "severity": "blocker", "warn" or "advice"
-- "evidence": the exact string or image number in THIS creative you are reacting to, e.g. "string 12" or "image 3"
+- "evidence": the exact string or image number in THIS creative you are reacting to, e.g. "string 12" or "image ${imageCount ? imageFrom : 3}"
 - "why": one sentence on what a reviewer would object to
 - "suggestion": one sentence on the smallest change that fixes it
 
 Visible text strings:
-${copy || '(none found)'}`;
+${copy || '(none found)'}${trimmed > 0 ? `\n… and ${trimmed} more, omitted to stay within the prompt budget.` : ''}`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -2635,7 +2674,7 @@ function networkFailureHelp(url, err) {
  * Run one review. `fetchImpl` is injectable so tests run without a network.
  * @returns {{ findings: Array, usage: { in, out }, provider, model }}
  */
-async function review({ provider = DEFAULT_PROVIDER, key, model, endpoint = '', texts = [], sheetB64 = null, imageCount = 0, appName = '', network = '', sendImages = true, fetchImpl = globalThis.fetch }) {
+async function review({ provider = DEFAULT_PROVIDER, key, model, endpoint = '', texts = [], sheetB64 = null, imageCount = 0, imageFrom = 1, batch = null, appName = '', network = '', sendImages = true, fetchImpl = globalThis.fetch }) {
   const p = PROVIDERS[provider];
   if (!p) throw new Error(`Unknown provider "${provider}"`);
   const ad = ADAPTERS[p.api];
@@ -2648,7 +2687,11 @@ async function review({ provider = DEFAULT_PROVIDER, key, model, endpoint = '', 
   }
   // A text-only model is sent the copy alone rather than an image it will reject.
   const withImages = sendImages && !!sheetB64 && supportsVision(provider, model);
-  const prompt = buildPrompt({ texts, appName, network, imageCount: withImages ? imageCount : 0 });
+  const prompt = buildPrompt({
+    texts, appName, network,
+    imageCount: withImages ? imageCount : 0,
+    imageFrom, batch: withImages ? batch : null,
+  });
   const req = ad.request({ key, model, prompt, imageB64: withImages ? sheetB64 : null, endpoint: base });
   let res;
   try {
@@ -2669,6 +2712,87 @@ async function review({ provider = DEFAULT_PROVIDER, key, model, endpoint = '', 
   };
 }
 
+/**
+ * Collapse findings that several passes each reported.
+ *
+ * Every pass is given the same copy, so a concern about the text comes back
+ * once per pass. Art findings are naturally distinct because each pass sees
+ * different images. Two findings are the same when they name the same policy,
+ * say the same thing, and point at the same evidence — evidence is part of the
+ * key so "fake close button, image 12" and "fake close button, image 40" both
+ * survive, which is what a reviewer needs to see.
+ */
+function mergeFindings(lists) {
+  const seen = new Map();
+  for (const list of lists) {
+    for (const f of list) {
+      const key = [f.area, f.title, f.measured].join('|').toLowerCase();
+      const prior = seen.get(key);
+      // Keep the better-evidenced copy: a sourced finding beats an unsourced one.
+      if (!prior || (!prior.sourced && f.sourced)) seen.set(key, f);
+    }
+  }
+  return [...seen.values()];
+}
+
+/**
+ * Review a creative in full, across as many passes as its art requires.
+ *
+ * One call per contact sheet. The copy goes with every pass, because a policy
+ * judgement about an image usually depends on the words beside it; the passes
+ * are then merged and de-duplicated. A pass that fails does not lose the ones
+ * that succeeded — its error is returned alongside the findings, so a review of
+ * six sheets where the fourth times out still reports the other five.
+ *
+ * @param {object} o
+ * @param {Array} o.sheets      from `contactSheets`; empty runs a single copy-only pass
+ * @param {function} [o.onProgress] called as ({ index, total, sheet }) before each pass
+ * @returns {{ findings, usage, passes, images, failed, sawImages, provider, model }}
+ */
+async function reviewAll({ sheets = [], onProgress = null, ...opts }) {
+  const withImages = opts.sendImages !== false && sheets.length > 0
+    && supportsVision(opts.provider || DEFAULT_PROVIDER, opts.model);
+  // Nothing to look at, or a text-only model: one pass with the copy alone.
+  const passes = withImages ? sheets : [null];
+  const totalImages = sheets.reduce((n, s) => n + s.count, 0);
+  const lists = [], failed = [];
+  const usage = { in: 0, out: 0 };
+  let sawImages = false;
+
+  for (let i = 0; i < passes.length; i++) {
+    const sheet = passes[i];
+    if (onProgress) onProgress({ index: i + 1, total: passes.length, sheet });
+    try {
+      const r = await review({
+        ...opts,
+        sheetB64: sheet ? sheet.b64 : null,
+        imageCount: sheet ? sheet.count : 0,
+        imageFrom: sheet ? sheet.from : 1,
+        batch: passes.length > 1 ? { index: i + 1, total: passes.length, totalImages } : null,
+      });
+      lists.push(r.findings);
+      usage.in += r.usage.in; usage.out += r.usage.out;
+      sawImages = sawImages || r.sawImages;
+    } catch (err) {
+      failed.push({ pass: i + 1, images: sheet ? `${sheet.from}–${sheet.from + sheet.count - 1}` : 'copy', message: err.message });
+    }
+  }
+  // Every pass failing is a failure, not an all-clear.
+  if (!lists.length) throw new Error(failed.map((f) => f.message).join(' · '));
+
+  const findings = mergeFindings(lists);
+  return {
+    findings, usage, failed,
+    passes: passes.length,
+    images: withImages ? totalImages : 0,
+    sawImages,
+    provider: opts.provider || DEFAULT_PROVIDER,
+    model: opts.model,
+    sourced: findings.filter((f) => f.sourced).length,
+    unsourced: findings.filter((f) => !f.sourced).length,
+  };
+}
+
 /* ------------------------------------------------------------------ *
  * Browser-only: the contact sheet
  * ------------------------------------------------------------------ */
@@ -2681,24 +2805,20 @@ function b64ToBytes(b64) {
 }
 
 /**
- * Draw the creative's largest images into numbered cells. Returns base64 JPEG
- * and the number of images drawn, or null when there is no raster art.
- * Decodes from the document's own bytes — no fetch, so it works offline and
- * inside sandboxes that block network access.
+ * How many images go on one sheet.
+ *
+ * Not a taste decision. Every vision API scales an oversized image down before
+ * the model sees it — Claude to 1568px on the longest edge — and the sheet is
+ * `cols * cell` wide by `rows * cell` tall. At 6 columns of 200px, 42 images is
+ * 7 rows, so the sheet is 1200x1400 and arrives unscaled. Push past that and
+ * every cell shrinks: at 100 images the sheet is 3400px tall, comes back scaled
+ * to 46%, and the drawn text this pass exists to read stops being legible.
+ *
+ * So more images per sheet buys nothing and costs sight. Batch instead.
  */
-async function contactSheet(html, { max = 30, cols = 6, cell = 200 } = {}) {
-  if (typeof document === 'undefined') throw new Error('contactSheet needs a browser');
-  const imgs = inventoryImages(html, { max });
-  if (!imgs.length) return null;
-  const bitmaps = [];
-  for (const im of imgs) {
-    try {
-      const uri = html.substr(im.start, im.length);
-      const bytes = b64ToBytes(uri.slice(uri.indexOf(',') + 1));
-      bitmaps.push(await createImageBitmap(new Blob([bytes], { type: im.mime })));
-    } catch { /* undecodable image — skip it */ }
-  }
-  if (!bitmaps.length) return null;
+const SHEET_MAX = 42;
+
+function drawSheet(bitmaps, firstNumber, cols, cell) {
   const rows = Math.ceil(bitmaps.length / cols);
   const canvas = document.createElement('canvas');
   canvas.width = cols * cell; canvas.height = rows * cell;
@@ -2709,15 +2829,58 @@ async function contactSheet(html, { max = 30, cols = 6, cell = 200 } = {}) {
     const k = Math.min((cell - 16) / bm.width, (cell - 16) / bm.height, 1);
     ctx.drawImage(bm, x + (cell - bm.width * k) / 2, y + (cell - bm.height * k) / 2 + 6, bm.width * k, bm.height * k);
     bm.close();
-    ctx.fillStyle = '#000'; ctx.fillRect(x, y, 34, 18);
-    ctx.fillStyle = '#ffeb3b'; ctx.font = 'bold 13px monospace'; ctx.fillText(String(i + 1), x + 4, y + 14);
+    // Numbered continuously across sheets, so evidence like "image 47" survives the merge.
+    const label = String(firstNumber + i);
+    ctx.fillStyle = '#000'; ctx.fillRect(x, y, 12 + label.length * 8, 18);
+    ctx.fillStyle = '#ffeb3b'; ctx.font = 'bold 13px monospace'; ctx.fillText(label, x + 4, y + 14);
     ctx.strokeStyle = '#555'; ctx.strokeRect(x + .5, y + .5, cell - 1, cell - 1);
   });
   const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
-  return { b64: dataUrl.slice(dataUrl.indexOf(',') + 1), dataUrl, count: bitmaps.length };
+  return { b64: dataUrl.slice(dataUrl.indexOf(',') + 1), dataUrl, count: bitmaps.length, from: firstNumber };
 }
 
-return { supportsVision, detectProvider, buildPrompt, parseJsonLoose, normalizeFindings, networkFailureHelp, review, contactSheet, PROVIDERS, DEFAULT_PROVIDER, POLICY_SOURCE, POLICY_TEXT };
+/**
+ * Draw every one of the creative's images into numbered cells, across as many
+ * sheets as it takes. Largest first, so if anything ever is dropped it is the
+ * particles rather than the artwork.
+ *
+ * Decodes from the document's own bytes — no fetch, so it works offline and
+ * inside sandboxes that block network access.
+ *
+ * @returns {Array<{b64, dataUrl, count, from}>} one entry per sheet, empty when
+ *   the creative has no decodable raster art.
+ */
+async function contactSheets(html, { perSheet = SHEET_MAX, cols = 6, cell = 200, max = Infinity } = {}) {
+  if (typeof document === 'undefined') throw new Error('contactSheets needs a browser');
+  const imgs = inventoryImages(html, { max });
+  if (!imgs.length) return [];
+  const sheets = [];
+  let batch = [], firstNumber = 1, drawn = 0;
+  for (const im of imgs) {
+    try {
+      const uri = html.substr(im.start, im.length);
+      const bytes = b64ToBytes(uri.slice(uri.indexOf(',') + 1));
+      batch.push(await createImageBitmap(new Blob([bytes], { type: im.mime })));
+    } catch { continue; /* undecodable image — skip it, and do not spend a number on it */ }
+    if (batch.length === perSheet) {
+      sheets.push(drawSheet(batch, firstNumber, cols, cell));
+      drawn += batch.length; firstNumber = drawn + 1; batch = [];
+    }
+  }
+  if (batch.length) sheets.push(drawSheet(batch, firstNumber, cols, cell));
+  return sheets;
+}
+
+/**
+ * The first sheet only. Kept for callers that want a single image and accept
+ * that a large creative will not fit on it.
+ */
+async function contactSheet(html, { max = SHEET_MAX, cols = 6, cell = 200 } = {}) {
+  const [first] = await contactSheets(html, { perSheet: max, cols, cell, max });
+  return first || null;
+}
+
+return { supportsVision, detectProvider, buildPrompt, parseJsonLoose, normalizeFindings, networkFailureHelp, review, mergeFindings, reviewAll, contactSheets, contactSheet, PROVIDERS, DEFAULT_PROVIDER, PROMPT_TEXT_BUDGET, SHEET_MAX, POLICY_SOURCE, POLICY_TEXT };
 })();
 
 /* ---- index.html ---- */
@@ -2726,7 +2889,7 @@ const { audit } = __rp['audit'];
 const { fixAll, sanitizeName, reroot, pickEntry } = __rp['convert'];
 const { score } = __rp['score'];
 const { readZip, writeZip } = __rp['zip'];
-const { contactSheet, review, supportsVision, detectProvider, PROVIDERS, DEFAULT_PROVIDER, POLICY_SOURCE } = __rp['aiscan'];
+const { contactSheets, reviewAll, supportsVision, detectProvider, PROVIDERS, DEFAULT_PROVIDER, POLICY_SOURCE } = __rp['aiscan'];
 
 const $ = (id) => document.getElementById(id);
 // Browser storage can be absent or throw (private windows, sandboxed previews); the page must not care.
@@ -3152,20 +3315,49 @@ async function aiReview(f) {
   const html = S.fixed && f.fixedHtml ? f.fixedHtml : f.html;
   const src = S.fixed && f.after ? f.after : f.before;
   const wantImages = $('sendImages').checked && supportsVision(provider, model);
-  let sheet = null;
+  const selected = () => S.files[S.sel] === f;
+
+  let sheets = [];
   if (wantImages) {
-    log(`${f.name}: building contact sheet…`);
-    sheet = await contactSheet(html);
-    if (sheet && S.files[S.sel] === f) { $('sheet').src = sheet.dataUrl; $('sheetBox').style.display = ''; }
+    log(`${f.name}: building contact sheets…`);
+    sheets = await contactSheets(html);
+    const total = sheets.reduce((n, s) => n + s.count, 0);
+    if (sheets.length && selected()) {
+      // Every sheet is shown, so the operator can check what the model was given.
+      $('sheets').innerHTML = '';
+      for (const s of sheets) {
+        const cap = document.createElement('div');
+        cap.className = 'hint';
+        cap.style.margin = '8px 0 3px';
+        cap.textContent = `images ${s.from}–${s.from + s.count - 1}`;
+        const img = document.createElement('img');
+        img.src = s.dataUrl; img.alt = `contact sheet, images ${s.from} to ${s.from + s.count - 1}`;
+        $('sheets').append(cap, img);
+      }
+      $('sheetCount').textContent = sheets.length > 1 ? `· ${total} images over ${sheets.length} sheets` : `· ${total} images`;
+      $('sheetBox').style.display = '';
+    }
+    if (sheets.length > 1) {
+      log(`${f.name}: ${total} images — too many for one legible sheet, so the review runs in ${sheets.length} passes`);
+    }
   }
-  log(`${f.name}: asking ${PROVIDERS[provider].label} · ${model} (${src.text.length} strings, ${sheet ? sheet.count : 0} images)…`);
-  const r = await review({
-    provider, key, model, endpoint: $('endpoint').value.trim(), sendImages: wantImages,
-    texts: src.text, sheetB64: sheet ? sheet.b64 : null, imageCount: sheet ? sheet.count : 0,
-    network: f.network,
+
+  const r = await reviewAll({
+    sheets, provider, key, model, endpoint: $('endpoint').value.trim(), sendImages: wantImages,
+    texts: src.text, network: f.network,
+    onProgress: ({ index, total, sheet }) => {
+      const scope = sheet ? `images ${sheet.from}–${sheet.from + sheet.count - 1}` : 'copy only';
+      const pass = total > 1 ? `pass ${index}/${total}, ` : '';
+      log(`${f.name}: asking ${PROVIDERS[provider].label} · ${model} (${pass}${src.text.length} strings, ${scope})…`);
+    },
   });
   f.ai = r.findings;
-  log(`${f.name}: AI review — ${r.findings.length} concern(s) · ${r.usage.in} in / ${r.usage.out} out tokens${r.sawImages ? '' : ' · copy only'}`, r.findings.some((x) => x.severity === 'blocker') ? 'w' : 's');
+
+  // A pass that failed is named, not swallowed: those images went unreviewed.
+  for (const fail of r.failed) log(`${f.name}: pass ${fail.pass} (${fail.images}) failed — ${fail.message}`, 'e');
+  const coverage = r.sawImages ? `${r.images} image(s) over ${r.passes} pass(es)` : 'copy only';
+  log(`${f.name}: AI review — ${r.findings.length} concern(s) · ${coverage} · ${r.usage.in} in / ${r.usage.out} out tokens`,
+    r.findings.some((x) => x.severity === 'blocker') ? 'w' : 's');
 }
 $('btnAiOne').addEventListener('click', async () => {
   const f = S.files[S.sel]; if (!f) return;

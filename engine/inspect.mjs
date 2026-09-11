@@ -173,8 +173,13 @@ function looksLikeCopy(s) {
  * Visible copy: markup text and attribute labels, plus string literals in
  * inline scripts that look like UI text. Each entry carries where it came
  * from so a finding can say "in a script string" vs "in the page".
+ *
+ * `max` is a runaway guard, not a review budget. It sits far above any real
+ * creative — a localisation table is the only thing that approaches it — so in
+ * practice every distinct string is returned. Strings are deduplicated
+ * case-insensitively, so the count is of distinct copy, not occurrences.
  */
-export function extractText(html, { max = 600 } = {}) {
+export function extractText(html, { max = 5000 } = {}) {
   const seen = new Set();
   const out = [];
   const push = (text, where) => {
@@ -221,13 +226,18 @@ const DATA_IMG_RE = /data:image\/(png|jpe?g|webp|gif);base64,([A-Za-z0-9+/=]{200
 /**
  * Every raster image inlined as a data: URI, largest first. Only offsets and
  * sizes — decoding is browser work and only the AI review needs pixels.
+ *
+ * Returns all of them by default. The review batches them across several
+ * contact sheets rather than discarding the tail, so the caller decides how
+ * many to draw, not this function.
  */
-export function inventoryImages(html, { max = 40 } = {}) {
+export function inventoryImages(html, { max = Infinity } = {}) {
   const out = [];
   let m;
   DATA_IMG_RE.lastIndex = 0;
   while ((m = DATA_IMG_RE.exec(html))) {
     out.push({ mime: `image/${m[1] === 'jpg' ? 'jpeg' : m[1]}`, start: m.index, length: m[0].length, bytes: Math.floor(m[2].length * 0.75) });
   }
-  return out.sort((a, b) => b.bytes - a.bytes).slice(0, max);
+  out.sort((a, b) => b.bytes - a.bytes);
+  return Number.isFinite(max) ? out.slice(0, max) : out;
 }

@@ -212,7 +212,7 @@ dialog#policyInfo::backdrop{background:#000a;backdrop-filter:blur(2px)}
           <button class="ghost" id="btnAiOne" disabled>Review selected file</button>
           <button class="ghost" id="btnAiAll" disabled>Review all files</button>
         </div>
-        <details id="sheetBox" style="margin-top:8px;display:none"><summary>What the model saw</summary><img id="sheet" alt="contact sheet"></details>
+        <details id="sheetBox" style="margin-top:8px;display:none"><summary>What the model saw <span id="sheetCount" class="hint"></span></summary><div id="sheets"></div></details>
       </div>
     </div>
   </div>
@@ -277,7 +277,7 @@ import { audit } from './engine/audit.mjs';
 import { fixAll, sanitizeName, reroot, pickEntry } from './engine/convert.mjs';
 import { score } from './engine/score.mjs';
 import { readZip, writeZip } from './engine/zip.mjs';
-import { contactSheet, review, supportsVision, detectProvider, PROVIDERS, DEFAULT_PROVIDER, POLICY_SOURCE } from './engine/aiscan.mjs';
+import { contactSheets, reviewAll, supportsVision, detectProvider, PROVIDERS, DEFAULT_PROVIDER, POLICY_SOURCE } from './engine/aiscan.mjs';
 
 const $ = (id) => document.getElementById(id);
 // Browser storage can be absent or throw (private windows, sandboxed previews); the page must not care.
@@ -703,20 +703,49 @@ async function aiReview(f) {
   const html = S.fixed && f.fixedHtml ? f.fixedHtml : f.html;
   const src = S.fixed && f.after ? f.after : f.before;
   const wantImages = $('sendImages').checked && supportsVision(provider, model);
-  let sheet = null;
+  const selected = () => S.files[S.sel] === f;
+
+  let sheets = [];
   if (wantImages) {
-    log(`${f.name}: building contact sheet…`);
-    sheet = await contactSheet(html);
-    if (sheet && S.files[S.sel] === f) { $('sheet').src = sheet.dataUrl; $('sheetBox').style.display = ''; }
+    log(`${f.name}: building contact sheets…`);
+    sheets = await contactSheets(html);
+    const total = sheets.reduce((n, s) => n + s.count, 0);
+    if (sheets.length && selected()) {
+      // Every sheet is shown, so the operator can check what the model was given.
+      $('sheets').innerHTML = '';
+      for (const s of sheets) {
+        const cap = document.createElement('div');
+        cap.className = 'hint';
+        cap.style.margin = '8px 0 3px';
+        cap.textContent = `images ${s.from}–${s.from + s.count - 1}`;
+        const img = document.createElement('img');
+        img.src = s.dataUrl; img.alt = `contact sheet, images ${s.from} to ${s.from + s.count - 1}`;
+        $('sheets').append(cap, img);
+      }
+      $('sheetCount').textContent = sheets.length > 1 ? `· ${total} images over ${sheets.length} sheets` : `· ${total} images`;
+      $('sheetBox').style.display = '';
+    }
+    if (sheets.length > 1) {
+      log(`${f.name}: ${total} images — too many for one legible sheet, so the review runs in ${sheets.length} passes`);
+    }
   }
-  log(`${f.name}: asking ${PROVIDERS[provider].label} · ${model} (${src.text.length} strings, ${sheet ? sheet.count : 0} images)…`);
-  const r = await review({
-    provider, key, model, endpoint: $('endpoint').value.trim(), sendImages: wantImages,
-    texts: src.text, sheetB64: sheet ? sheet.b64 : null, imageCount: sheet ? sheet.count : 0,
-    network: f.network,
+
+  const r = await reviewAll({
+    sheets, provider, key, model, endpoint: $('endpoint').value.trim(), sendImages: wantImages,
+    texts: src.text, network: f.network,
+    onProgress: ({ index, total, sheet }) => {
+      const scope = sheet ? `images ${sheet.from}–${sheet.from + sheet.count - 1}` : 'copy only';
+      const pass = total > 1 ? `pass ${index}/${total}, ` : '';
+      log(`${f.name}: asking ${PROVIDERS[provider].label} · ${model} (${pass}${src.text.length} strings, ${scope})…`);
+    },
   });
   f.ai = r.findings;
-  log(`${f.name}: AI review — ${r.findings.length} concern(s) · ${r.usage.in} in / ${r.usage.out} out tokens${r.sawImages ? '' : ' · copy only'}`, r.findings.some((x) => x.severity === 'blocker') ? 'w' : 's');
+
+  // A pass that failed is named, not swallowed: those images went unreviewed.
+  for (const fail of r.failed) log(`${f.name}: pass ${fail.pass} (${fail.images}) failed — ${fail.message}`, 'e');
+  const coverage = r.sawImages ? `${r.images} image(s) over ${r.passes} pass(es)` : 'copy only';
+  log(`${f.name}: AI review — ${r.findings.length} concern(s) · ${coverage} · ${r.usage.in} in / ${r.usage.out} out tokens`,
+    r.findings.some((x) => x.severity === 'blocker') ? 'w' : 's');
 }
 $('btnAiOne').addEventListener('click', async () => {
   const f = S.files[S.sel]; if (!f) return;
