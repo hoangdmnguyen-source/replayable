@@ -209,7 +209,7 @@ dialog#policyInfo::backdrop{background:#000a;backdrop-filter:blur(2px)}
           <button class="ghost" id="btnAiOne" disabled>Review selected file</button>
           <button class="ghost" id="btnAiAll" disabled>Review all files</button>
         </div>
-        <details id="sheetBox" style="margin-top:8px;display:none"><summary>What the model saw <span id="sheetCount" class="hint"></span></summary><div id="sheets"></div></details>
+        <details id="sheetBox" style="margin-top:8px"><summary>What the AI is given <span id="sheetCount" class="hint">· open to build it</span></summary><div id="sheets"></div></details>
       </div>
     </div>
   </div>
@@ -905,7 +905,21 @@ function extractText(html, { max = 5000 } = {}) {
  * Art inventory (for the optional AI review's contact sheet)
  * ------------------------------------------------------------------ */
 
-const DATA_IMG_RE = /data:image\/(png|jpe?g|webp|gif);base64,([A-Za-z0-9+/=]{200,})/g;
+/**
+ * Inlined images, in every shape an exporter actually emits.
+ *
+ * Each allowance here is a creative that was previously invisible to the AI
+ * review, and invisible in a way that looked like a clean bill of health:
+ *
+ *   `i` flag       — `data:image/PNG;base64` is legal and some tools emit it.
+ *   svg+xml, avif  — an SVG can carry a logo or drawn wording; avif is now
+ *                    common in size-squeezed bundles.
+ *   `\s` in the payload — prettified HTML wraps base64 across lines. Without
+ *                    this the match stopped at the first newline and produced a
+ *                    truncated payload, which decodes to nothing and was then
+ *                    skipped silently as an "undecodable image".
+ */
+const DATA_IMG_RE = /data:image\/(png|jpe?g|webp|gif|avif|bmp|svg\+xml);base64,([A-Za-z0-9+/=\s]{200,})/gi;
 
 /**
  * Every raster image inlined as a data: URI, largest first. Only offsets and
@@ -920,7 +934,15 @@ function inventoryImages(html, { max = Infinity } = {}) {
   let m;
   DATA_IMG_RE.lastIndex = 0;
   while ((m = DATA_IMG_RE.exec(html))) {
-    out.push({ mime: `image/${m[1] === 'jpg' ? 'jpeg' : m[1]}`, start: m.index, length: m[0].length, bytes: Math.floor(m[2].length * 0.75) });
+    const fmt = m[1].toLowerCase();
+    // Size the payload on its real characters: wrapped base64 carries newlines
+    // that are not data, and counting them overstates a sprite into first place.
+    const payload = m[2].replace(/\s+/g, '');
+    out.push({
+      mime: `image/${fmt === 'jpg' ? 'jpeg' : fmt}`,
+      start: m.index, length: m[0].length,
+      bytes: Math.floor(payload.length * 0.75),
+    });
   }
   out.sort((a, b) => b.bytes - a.bytes);
   return Number.isFinite(max) ? out.slice(0, max) : out;
@@ -1523,6 +1545,33 @@ const f = (id, severity, area, title, detail, extra = {}) => ({
 
 const MB = (n) => `${(n / 1048576).toFixed(2)} MB`;
 
+// Opening <video ...> tag, then everything up to the closing tag. An unclosed
+// element runs to the end of the string, which is the right reading: whatever
+// follows it is what the browser would treat as its children.
+const VIDEO_BLOCK_RE = /<video\b([^>]*)>([\s\S]*?)(?:<\/video>|$)/gi;
+const SOURCE_SRC_RE = /<source\b[^>]*\bsrc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/i;
+const TAG_SRC_RE = /\bsrc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/i;
+
+/**
+ * True when the markup holds a <video> that names nothing to play.
+ *
+ * Media can be supplied two ways, and both are correct HTML: src on the tag,
+ * or one or more <source> children. Only an element offering neither is empty.
+ *
+ * @param {string} markup  HTML with script bodies already removed
+ * @returns {boolean}
+ */
+function videoWithoutSource(markup) {
+  VIDEO_BLOCK_RE.lastIndex = 0;
+  for (let m; (m = VIDEO_BLOCK_RE.exec(markup));) {
+    const [, attrs, children] = m;
+    if (TAG_SRC_RE.test(attrs)) continue;
+    if (SOURCE_SRC_RE.test(children)) continue;
+    return true;
+  }
+  return false;
+}
+
 /**
  * @param {string} html   entry HTML of the playable (converted or not)
  * @param {object} pkg    { zipBytes, entries: [{ name, size, stored }], entryName }
@@ -1759,9 +1808,13 @@ function audit(html, pkg = {}, opts = {}) {
     const extra = fixable ? { fix: p.fix } : { manual: 'Needs a change in the creative itself.' };
     findings.push(f(`prohibited-${p.id}`, 'blocker', 'technical', `Prohibited: ${p.label}`, p.why, { measured: p.label, ...extra }));
   }
-  if (/<video(?![^>]*\bsrc=)[^>]*>/i.test(markup)) {
-    findings.push(f('prohibited-video-nosrc', 'blocker', 'technical', 'Prohibited: <video> without src',
-      'A <video> element with no src attribute is disallowed in Google Ads HTML5 assets.', { manual: 'Give the element a src or remove it.' }));
+  // A <video> needs to know what to play. That can come from src on the tag
+  // itself, or from a <source src="..."> child -- the second form is ordinary
+  // HTML, so testing the opening tag alone reports healthy markup as a blocker.
+  if (videoWithoutSource(markup)) {
+    findings.push(f('prohibited-video-nosrc', 'blocker', 'technical', 'Empty <video> element',
+      'This <video> tag names no file to play: there is no src on the tag and no <source> child inside it. In the ad slot it renders as a blank rectangle, and Google rejects HTML5 assets that carry one.',
+      { manual: 'Point the element at a video -- src on the tag, or a <source src="..."> inside it -- or delete the element.' }));
   }
   if (info.externalHosts.length) {
     findings.push(f('external-refs', 'blocker', 'technical', 'Loads resources from outside the package',
@@ -1858,7 +1911,7 @@ function verdict(findings) {
   return { label: 'Meets the checks we can verify', tone: 'ok' };
 }
 
-return { audit, verdict };
+return { videoWithoutSource, audit, verdict };
 })();
 
 /* ---- engine/score.mjs ---- */
@@ -2841,7 +2894,9 @@ async function reviewAll({ sheets = [], onProgress = null, ...opts }) {
  * ------------------------------------------------------------------ */
 
 function b64ToBytes(b64) {
-  const bin = atob(b64);
+  // Wrapped payloads carry newlines. atob tolerates them, but not every engine
+  // agrees on which whitespace counts, so strip it rather than find out.
+  const bin = atob(b64.replace(/\s+/g, ''));
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
@@ -3185,6 +3240,7 @@ function renderDetail() {
   $('detail').innerHTML = parts.join('');
   const b = $('btnDlSel');
   if (b) b.addEventListener('click', () => downloadOne(f));
+  syncSheetPanel();
 }
 
 /* ---------- preview ----------
@@ -3350,12 +3406,98 @@ $('modelCustom').addEventListener('input', () => { store.set('rp_model_custom_' 
 $('endpoint').addEventListener('input', () => store.set('rp_endpoint_' + prov.value, $('endpoint').value.trim()));
 syncProvider();
 
+/**
+ * The contact sheets for a file, built once and kept.
+ *
+ * Cached against the exact HTML they were drawn from, so switching between the
+ * original and the fixed copy rebuilds rather than showing the wrong art.
+ */
+async function ensureSheets(f) {
+  const html = sheetSource(f);
+  if (sheetsFresh(f)) return f.sheetCache.sheets;
+  const sheets = await contactSheets(html);
+  f.sheetCache = { html, sheets };
+  return sheets;
+}
+
+/**
+ * Draw the sheets into the panel, for the selected file only.
+ *
+ * A creative with no decodable raster art says so. Leaving the panel blank or
+ * hidden reads as "nothing to show you" when the honest message is "there is no
+ * art here, so this review is judging copy alone".
+ */
+function renderSheets(f, sheets) {
+  if (S.files[S.sel] !== f) return;
+  const box = $('sheets');
+  box.innerHTML = '';
+  const total = sheets.reduce((n, s) => n + s.count, 0);
+  if (!sheets.length) {
+    const p = document.createElement('div');
+    p.className = 'hint';
+    p.textContent = 'No inlined images found in this file, so the AI is given the copy only. '
+      + 'Art loaded from separate files in the zip, or drawn by code at runtime, cannot be put on a sheet.';
+    box.append(p);
+    $('sheetCount').textContent = '· copy only, no images';
+    return;
+  }
+  // Every sheet is shown, so the operator can check what the model is given.
+  for (const s of sheets) {
+    const cap = document.createElement('div');
+    cap.className = 'hint';
+    cap.style.margin = '8px 0 3px';
+    cap.textContent = `images ${s.from}–${s.from + s.count - 1}`;
+    const img = document.createElement('img');
+    img.src = s.dataUrl; img.alt = `contact sheet, images ${s.from} to ${s.from + s.count - 1}`;
+    box.append(cap, img);
+  }
+  $('sheetCount').textContent = sheets.length > 1
+    ? `· ${total} images over ${sheets.length} sheets` : `· ${total} images`;
+}
+
+// The HTML the sheets should be drawn from: the fixed copy when the operator is
+// looking at it, otherwise the original.
+const sheetSource = (f) => (S.fixed && f.fixedHtml ? f.fixedHtml : f.html);
+const sheetsFresh = (f) => !!f.sheetCache && f.sheetCache.html === sheetSource(f);
+
+/**
+ * Bring the panel into line with the selected file.
+ *
+ * Cheap and idempotent: it redraws from the cache when there is one, and
+ * otherwise only resets the label. It never builds — building is the operator's
+ * decision, taken by opening the panel.
+ */
+function syncSheetPanel() {
+  const f = S.files[S.sel];
+  if (!f) {
+    $('sheets').innerHTML = '';
+    $('sheetBox').open = false;
+    $('sheetCount').textContent = '· open to build it';
+    return;
+  }
+  if (sheetsFresh(f)) { renderSheets(f, f.sheetCache.sheets); return; }
+  $('sheets').innerHTML = '';
+  $('sheetBox').open = false;
+  $('sheetCount').textContent = '· open to build it';
+}
+
+// Built when the panel is opened, not when a review runs: the operator should be
+// able to see what would be sent without holding an API key, and before spending
+// a call on it.
+$('sheetBox').addEventListener('toggle', async () => {
+  const f = S.files[S.sel];
+  if (!$('sheetBox').open || !f) return;
+  if (!sheetsFresh(f)) $('sheetCount').textContent = '· building…';
+  try { renderSheets(f, await ensureSheets(f)); } catch (err) {
+    $('sheetCount').textContent = `· could not build (${err.message})`;
+  }
+});
+
 async function aiReview(f) {
   const provider = prov.value;
   const key = $('apiKey').value.trim();
   if (!key) throw new Error('paste an API key first');
   const model = currentModel();
-  const html = S.fixed && f.fixedHtml ? f.fixedHtml : f.html;
   const src = S.fixed && f.after ? f.after : f.before;
   const wantImages = $('sendImages').checked && supportsVision(provider, model);
   const selected = () => S.files[S.sel] === f;
@@ -3363,24 +3505,12 @@ async function aiReview(f) {
   let sheets = [];
   if (wantImages) {
     log(`${f.name}: building contact sheets…`);
-    sheets = await contactSheets(html);
+    sheets = await ensureSheets(f);
     const total = sheets.reduce((n, s) => n + s.count, 0);
-    if (sheets.length && selected()) {
-      // Every sheet is shown, so the operator can check what the model was given.
-      $('sheets').innerHTML = '';
-      for (const s of sheets) {
-        const cap = document.createElement('div');
-        cap.className = 'hint';
-        cap.style.margin = '8px 0 3px';
-        cap.textContent = `images ${s.from}–${s.from + s.count - 1}`;
-        const img = document.createElement('img');
-        img.src = s.dataUrl; img.alt = `contact sheet, images ${s.from} to ${s.from + s.count - 1}`;
-        $('sheets').append(cap, img);
-      }
-      $('sheetCount').textContent = sheets.length > 1 ? `· ${total} images over ${sheets.length} sheets` : `· ${total} images`;
-      $('sheetBox').style.display = '';
-    }
-    if (sheets.length > 1) {
+    if (selected()) renderSheets(f, sheets);
+    if (!sheets.length) {
+      log(`${f.name}: no inlined images to show the model — judging copy only`, 'w');
+    } else if (sheets.length > 1) {
       log(`${f.name}: ${total} images — too many for one legible sheet, so the review runs in ${sheets.length} passes`);
     }
   }

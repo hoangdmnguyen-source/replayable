@@ -212,7 +212,7 @@ dialog#policyInfo::backdrop{background:#000a;backdrop-filter:blur(2px)}
           <button class="ghost" id="btnAiOne" disabled>Review selected file</button>
           <button class="ghost" id="btnAiAll" disabled>Review all files</button>
         </div>
-        <details id="sheetBox" style="margin-top:8px;display:none"><summary>What the model saw <span id="sheetCount" class="hint"></span></summary><div id="sheets"></div></details>
+        <details id="sheetBox" style="margin-top:8px"><summary>What the AI is given <span id="sheetCount" class="hint">· open to build it</span></summary><div id="sheets"></div></details>
       </div>
     </div>
   </div>
@@ -530,6 +530,7 @@ function renderDetail() {
   $('detail').innerHTML = parts.join('');
   const b = $('btnDlSel');
   if (b) b.addEventListener('click', () => downloadOne(f));
+  syncSheetPanel();
 }
 
 /* ---------- preview ----------
@@ -695,12 +696,98 @@ $('modelCustom').addEventListener('input', () => { store.set('rp_model_custom_' 
 $('endpoint').addEventListener('input', () => store.set('rp_endpoint_' + prov.value, $('endpoint').value.trim()));
 syncProvider();
 
+/**
+ * The contact sheets for a file, built once and kept.
+ *
+ * Cached against the exact HTML they were drawn from, so switching between the
+ * original and the fixed copy rebuilds rather than showing the wrong art.
+ */
+async function ensureSheets(f) {
+  const html = sheetSource(f);
+  if (sheetsFresh(f)) return f.sheetCache.sheets;
+  const sheets = await contactSheets(html);
+  f.sheetCache = { html, sheets };
+  return sheets;
+}
+
+/**
+ * Draw the sheets into the panel, for the selected file only.
+ *
+ * A creative with no decodable raster art says so. Leaving the panel blank or
+ * hidden reads as "nothing to show you" when the honest message is "there is no
+ * art here, so this review is judging copy alone".
+ */
+function renderSheets(f, sheets) {
+  if (S.files[S.sel] !== f) return;
+  const box = $('sheets');
+  box.innerHTML = '';
+  const total = sheets.reduce((n, s) => n + s.count, 0);
+  if (!sheets.length) {
+    const p = document.createElement('div');
+    p.className = 'hint';
+    p.textContent = 'No inlined images found in this file, so the AI is given the copy only. '
+      + 'Art loaded from separate files in the zip, or drawn by code at runtime, cannot be put on a sheet.';
+    box.append(p);
+    $('sheetCount').textContent = '· copy only, no images';
+    return;
+  }
+  // Every sheet is shown, so the operator can check what the model is given.
+  for (const s of sheets) {
+    const cap = document.createElement('div');
+    cap.className = 'hint';
+    cap.style.margin = '8px 0 3px';
+    cap.textContent = `images ${s.from}–${s.from + s.count - 1}`;
+    const img = document.createElement('img');
+    img.src = s.dataUrl; img.alt = `contact sheet, images ${s.from} to ${s.from + s.count - 1}`;
+    box.append(cap, img);
+  }
+  $('sheetCount').textContent = sheets.length > 1
+    ? `· ${total} images over ${sheets.length} sheets` : `· ${total} images`;
+}
+
+// The HTML the sheets should be drawn from: the fixed copy when the operator is
+// looking at it, otherwise the original.
+const sheetSource = (f) => (S.fixed && f.fixedHtml ? f.fixedHtml : f.html);
+const sheetsFresh = (f) => !!f.sheetCache && f.sheetCache.html === sheetSource(f);
+
+/**
+ * Bring the panel into line with the selected file.
+ *
+ * Cheap and idempotent: it redraws from the cache when there is one, and
+ * otherwise only resets the label. It never builds — building is the operator's
+ * decision, taken by opening the panel.
+ */
+function syncSheetPanel() {
+  const f = S.files[S.sel];
+  if (!f) {
+    $('sheets').innerHTML = '';
+    $('sheetBox').open = false;
+    $('sheetCount').textContent = '· open to build it';
+    return;
+  }
+  if (sheetsFresh(f)) { renderSheets(f, f.sheetCache.sheets); return; }
+  $('sheets').innerHTML = '';
+  $('sheetBox').open = false;
+  $('sheetCount').textContent = '· open to build it';
+}
+
+// Built when the panel is opened, not when a review runs: the operator should be
+// able to see what would be sent without holding an API key, and before spending
+// a call on it.
+$('sheetBox').addEventListener('toggle', async () => {
+  const f = S.files[S.sel];
+  if (!$('sheetBox').open || !f) return;
+  if (!sheetsFresh(f)) $('sheetCount').textContent = '· building…';
+  try { renderSheets(f, await ensureSheets(f)); } catch (err) {
+    $('sheetCount').textContent = `· could not build (${err.message})`;
+  }
+});
+
 async function aiReview(f) {
   const provider = prov.value;
   const key = $('apiKey').value.trim();
   if (!key) throw new Error('paste an API key first');
   const model = currentModel();
-  const html = S.fixed && f.fixedHtml ? f.fixedHtml : f.html;
   const src = S.fixed && f.after ? f.after : f.before;
   const wantImages = $('sendImages').checked && supportsVision(provider, model);
   const selected = () => S.files[S.sel] === f;
@@ -708,24 +795,12 @@ async function aiReview(f) {
   let sheets = [];
   if (wantImages) {
     log(`${f.name}: building contact sheets…`);
-    sheets = await contactSheets(html);
+    sheets = await ensureSheets(f);
     const total = sheets.reduce((n, s) => n + s.count, 0);
-    if (sheets.length && selected()) {
-      // Every sheet is shown, so the operator can check what the model was given.
-      $('sheets').innerHTML = '';
-      for (const s of sheets) {
-        const cap = document.createElement('div');
-        cap.className = 'hint';
-        cap.style.margin = '8px 0 3px';
-        cap.textContent = `images ${s.from}–${s.from + s.count - 1}`;
-        const img = document.createElement('img');
-        img.src = s.dataUrl; img.alt = `contact sheet, images ${s.from} to ${s.from + s.count - 1}`;
-        $('sheets').append(cap, img);
-      }
-      $('sheetCount').textContent = sheets.length > 1 ? `· ${total} images over ${sheets.length} sheets` : `· ${total} images`;
-      $('sheetBox').style.display = '';
-    }
-    if (sheets.length > 1) {
+    if (selected()) renderSheets(f, sheets);
+    if (!sheets.length) {
+      log(`${f.name}: no inlined images to show the model — judging copy only`, 'w');
+    } else if (sheets.length > 1) {
       log(`${f.name}: ${total} images — too many for one legible sheet, so the review runs in ${sheets.length} passes`);
     }
   }

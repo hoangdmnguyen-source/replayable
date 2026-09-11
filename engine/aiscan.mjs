@@ -505,7 +505,9 @@ export async function reviewAll({ sheets = [], onProgress = null, ...opts }) {
  * ------------------------------------------------------------------ */
 
 function b64ToBytes(b64) {
-  const bin = atob(b64);
+  // Wrapped payloads carry newlines. atob tolerates them, but not every engine
+  // agrees on which whitespace counts, so strip it rather than find out.
+  const bin = atob(b64.replace(/\s+/g, ''));
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;

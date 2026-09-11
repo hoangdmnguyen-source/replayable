@@ -17,8 +17,8 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
-import { inspect, extractText } from './inspect.mjs';
-import { audit } from './audit.mjs';
+import { inspect, extractText, inventoryImages } from './inspect.mjs';
+import { audit, videoWithoutSource } from './audit.mjs';
 import { fixAll, applyFixes, shimParts, sanitizeName, reroot, pickEntry, inlineScripts, parseError, stripShim, canParse } from './convert.mjs';
 import { score } from './score.mjs';
 import { readZip, writeZip } from './zip.mjs';
@@ -594,6 +594,55 @@ console.log('copy a player never sees, and art the copy rules cannot reach');
   const noArt = buildPrompt({ texts: [], imageCount: 0 });
   ok(!/system or device UI/i.test(noArt), 'a copy-only review is not given the art checklist');
   ok(/"PLA 1"/.test(noArt), 'but is still told to ignore filenames');
+}
+
+console.log('a <video> is empty only when nothing tells it what to play');
+{
+  // Reporting standard markup as a blocker costs the operator more than missing
+  // a rare fault: they stop trusting the blockers that are real.
+  ok(!videoWithoutSource('<video src="a.mp4"></video>'), 'src on the tag is a source');
+  ok(!videoWithoutSource('<video><source src="a.mp4"></video>'), 'a <source> child is a source');
+  ok(!videoWithoutSource('<video playsinline><source src="a.mp4" type="video/mp4">'),
+    'and still is when the element is left unclosed');
+  ok(!videoWithoutSource('<video muted><source src="a.webm"><source src="a.mp4"></video>'),
+    'several <source> children are a source');
+  ok(!videoWithoutSource("<video><source src='a.mp4'></video>"), 'single quotes are a source');
+  ok(videoWithoutSource('<video id="v" playsinline></video>'), 'an element with no media is empty');
+  ok(videoWithoutSource('<video class="bg" muted loop></video>'), 'attributes alone are not media');
+  ok(videoWithoutSource('<video><source type="video/mp4"></video>'), 'a <source> without src names nothing');
+  ok(!videoWithoutSource('<div>no video here</div>'), 'markup without a <video> is quiet');
+  // Two elements, one healthy and one not: the fault must not be masked.
+  ok(videoWithoutSource('<video src="a.mp4"></video><video></video>'),
+    'a good element does not excuse an empty one');
+
+  const clean = '<!DOCTYPE html><html><head><title>x</title></head><body><video><source src="a.mp4"></video></body></html>';
+  ok(!has(audit(clean, {}).findings, 'prohibited-video-nosrc'), 'the audit stays quiet on ordinary video markup');
+  const empty = '<!DOCTYPE html><html><head><title>x</title></head><body><video id="v"></video></body></html>';
+  ok(has(audit(empty, {}).findings, 'prohibited-video-nosrc'), 'and still reports a genuinely empty element');
+}
+
+console.log('every inlined image is seen, in the shapes exporters really emit');
+{
+  // Each of these was previously invisible, and invisible in the worst way: the
+  // art never reached the model and the review still reported success.
+  const px = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQ'.repeat(4);
+  const seen = (html) => inventoryImages(html);
+  eq(seen(`<img src="data:image/png;base64,${px}">`).length, 1, 'a plain png is seen');
+  eq(seen(`<img src="DATA:IMAGE/PNG;BASE64,${px}">`).length, 1, 'an uppercase data URI is seen');
+  eq(seen(`<img src="data:image/svg+xml;base64,${px}">`).length, 1, 'svg is seen — it can carry drawn wording');
+  eq(seen(`<img src="data:image/avif;base64,${px}">`).length, 1, 'avif is seen');
+  eq(seen(`<img src="data:image/webp;base64,${px}">`).length, 1, 'webp is seen');
+
+  // Prettified HTML wraps base64 across lines. The old pattern stopped at the
+  // first newline, handing on a truncated payload that failed to decode and was
+  // then dropped as an "undecodable image" without a word to the operator.
+  const wrapped = seen(`<img src="data:image/png;base64,${px.slice(0, 40)}\n${px.slice(40)}">`);
+  eq(wrapped.length, 1, 'base64 wrapped across lines is seen');
+  eq(wrapped[0].bytes, seen(`<img src="data:image/png;base64,${px}">`)[0].bytes,
+    'and is sized on its real characters, so line breaks do not inflate it');
+
+  eq(seen(`<img src="data:image/jpg;base64,${px}">`)[0].mime, 'image/jpeg', 'jpg is normalised to jpeg');
+  eq(seen('<img src="data:image/png;base64,AAAA">').length, 0, 'a payload too short to be art is ignored');
 }
 
 console.log('unsupported SDKs alongside a Google path');

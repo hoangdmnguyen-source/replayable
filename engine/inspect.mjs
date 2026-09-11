@@ -225,7 +225,21 @@ export function extractText(html, { max = 5000 } = {}) {
  * Art inventory (for the optional AI review's contact sheet)
  * ------------------------------------------------------------------ */
 
-const DATA_IMG_RE = /data:image\/(png|jpe?g|webp|gif);base64,([A-Za-z0-9+/=]{200,})/g;
+/**
+ * Inlined images, in every shape an exporter actually emits.
+ *
+ * Each allowance here is a creative that was previously invisible to the AI
+ * review, and invisible in a way that looked like a clean bill of health:
+ *
+ *   `i` flag       — `data:image/PNG;base64` is legal and some tools emit it.
+ *   svg+xml, avif  — an SVG can carry a logo or drawn wording; avif is now
+ *                    common in size-squeezed bundles.
+ *   `\s` in the payload — prettified HTML wraps base64 across lines. Without
+ *                    this the match stopped at the first newline and produced a
+ *                    truncated payload, which decodes to nothing and was then
+ *                    skipped silently as an "undecodable image".
+ */
+const DATA_IMG_RE = /data:image\/(png|jpe?g|webp|gif|avif|bmp|svg\+xml);base64,([A-Za-z0-9+/=\s]{200,})/gi;
 
 /**
  * Every raster image inlined as a data: URI, largest first. Only offsets and
@@ -240,7 +254,15 @@ export function inventoryImages(html, { max = Infinity } = {}) {
   let m;
   DATA_IMG_RE.lastIndex = 0;
   while ((m = DATA_IMG_RE.exec(html))) {
-    out.push({ mime: `image/${m[1] === 'jpg' ? 'jpeg' : m[1]}`, start: m.index, length: m[0].length, bytes: Math.floor(m[2].length * 0.75) });
+    const fmt = m[1].toLowerCase();
+    // Size the payload on its real characters: wrapped base64 carries newlines
+    // that are not data, and counting them overstates a sprite into first place.
+    const payload = m[2].replace(/\s+/g, '');
+    out.push({
+      mime: `image/${fmt === 'jpg' ? 'jpeg' : fmt}`,
+      start: m.index, length: m[0].length,
+      bytes: Math.floor(payload.length * 0.75),
+    });
   }
   out.sort((a, b) => b.bytes - a.bytes);
   return Number.isFinite(max) ? out.slice(0, max) : out;

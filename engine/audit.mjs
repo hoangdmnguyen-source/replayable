@@ -39,6 +39,33 @@ const f = (id, severity, area, title, detail, extra = {}) => ({
 
 const MB = (n) => `${(n / 1048576).toFixed(2)} MB`;
 
+// Opening <video ...> tag, then everything up to the closing tag. An unclosed
+// element runs to the end of the string, which is the right reading: whatever
+// follows it is what the browser would treat as its children.
+const VIDEO_BLOCK_RE = /<video\b([^>]*)>([\s\S]*?)(?:<\/video>|$)/gi;
+const SOURCE_SRC_RE = /<source\b[^>]*\bsrc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/i;
+const TAG_SRC_RE = /\bsrc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/i;
+
+/**
+ * True when the markup holds a <video> that names nothing to play.
+ *
+ * Media can be supplied two ways, and both are correct HTML: src on the tag,
+ * or one or more <source> children. Only an element offering neither is empty.
+ *
+ * @param {string} markup  HTML with script bodies already removed
+ * @returns {boolean}
+ */
+export function videoWithoutSource(markup) {
+  VIDEO_BLOCK_RE.lastIndex = 0;
+  for (let m; (m = VIDEO_BLOCK_RE.exec(markup));) {
+    const [, attrs, children] = m;
+    if (TAG_SRC_RE.test(attrs)) continue;
+    if (SOURCE_SRC_RE.test(children)) continue;
+    return true;
+  }
+  return false;
+}
+
 /**
  * @param {string} html   entry HTML of the playable (converted or not)
  * @param {object} pkg    { zipBytes, entries: [{ name, size, stored }], entryName }
@@ -275,9 +302,13 @@ export function audit(html, pkg = {}, opts = {}) {
     const extra = fixable ? { fix: p.fix } : { manual: 'Needs a change in the creative itself.' };
     findings.push(f(`prohibited-${p.id}`, 'blocker', 'technical', `Prohibited: ${p.label}`, p.why, { measured: p.label, ...extra }));
   }
-  if (/<video(?![^>]*\bsrc=)[^>]*>/i.test(markup)) {
-    findings.push(f('prohibited-video-nosrc', 'blocker', 'technical', 'Prohibited: <video> without src',
-      'A <video> element with no src attribute is disallowed in Google Ads HTML5 assets.', { manual: 'Give the element a src or remove it.' }));
+  // A <video> needs to know what to play. That can come from src on the tag
+  // itself, or from a <source src="..."> child -- the second form is ordinary
+  // HTML, so testing the opening tag alone reports healthy markup as a blocker.
+  if (videoWithoutSource(markup)) {
+    findings.push(f('prohibited-video-nosrc', 'blocker', 'technical', 'Empty <video> element',
+      'This <video> tag names no file to play: there is no src on the tag and no <source> child inside it. In the ad slot it renders as a blank rectangle, and Google rejects HTML5 assets that carry one.',
+      { manual: 'Point the element at a video -- src on the tag, or a <source src="..."> inside it -- or delete the element.' }));
   }
   if (info.externalHosts.length) {
     findings.push(f('external-refs', 'blocker', 'technical', 'Loads resources from outside the package',
